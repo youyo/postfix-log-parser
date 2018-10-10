@@ -28,7 +28,7 @@ vendoring:
 ## Build
 build:
 	go get
-	goxz -os=darwin,linux -arch=amd64 -d=pkg ./credentor
+	goxz -os=darwin,linux -arch=amd64 -d=pkg ./$(Name)
 
 ## Release
 release:

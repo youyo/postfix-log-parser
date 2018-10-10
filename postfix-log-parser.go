@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	TimeFormat                 = "Jan 02 15:04:05"
-	TimeRegexpFormat           = `([A-Za-z]{3} [0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})`
+	TimeFormat                 = "Jan  2 15:04:05"
+	TimeRegexpFormat           = `([A-Za-z]{3}\s*[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2})`
 	HostRegexpFormat           = `([0-9A-Za-z\.]*)`
 	ProcessRegexpFormat        = `(postfix/[a-z]*\[[0-9]{1,5}\])?`
 	QueueIdRegexpFormat        = `([0-9A-Z]*)`

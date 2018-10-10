@@ -1,0 +1,66 @@
+workflows:
+  version: 2
+  main:
+    jobs:
+      - test
+      - release:
+          requires:
+            - test
+          filters:
+            branches:
+              only: master
+
+defaults: &defaults
+  working_directory: /go/src/github.com/youyo/postfix-log-parser
+  docker:
+    - image: circleci/golang:1
+      environment:
+        GO111MODULE: "on"
+
+version: 2
+jobs:
+  test:
+    <<: *defaults
+    steps:
+      - checkout
+      - restore_cache: &restore_cache
+          name: Restore go modules cache
+          keys:
+            - mod-{{ .Environment.COMMON_CACHE_KEY }}-{{ checksum "go.mod" }}
+      - run: &vendoring
+          name: Vendoring
+          command: make vendoring
+      - save_cache: &save_cache
+          name: Save go modules cache
+          key: mod-{{ .Environment.COMMON_CACHE_KEY }}-{{ checksum "go.mod" }}
+          paths:
+            - /go/pkg/mod/cache
+      - run: &setup
+          name: Dependency
+          command: |
+            make setup
+      - run: mkdir -p /tmp/test-results
+      - run:
+          name: Test
+          command: |
+            trap "go-junit-report </tmp/test-results/go-test.out > /tmp/test-results/go-test-report.xml" EXIT
+            make test | tee /tmp/test-results/go-test.out
+      - run: &build
+          name: Build
+          command: |
+            make build
+      - store_test_results:
+          path: /tmp/test-results
+  release:
+    <<: *defaults
+    steps:
+      - checkout
+      - restore_cache: *restore_cache
+      - run: *vendoring
+      - save_cache: *save_cache
+      - run: *setup
+      - run: *build
+      - run:
+          name: Release
+          command: |
+            make release

@@ -1,0 +1,7 @@
+.envrc
+__*
+postfix-log-parser/postfix-log-parser
+pkg/
+*.zip
+*.tgz
+*.tar.gz

@@ -1,0 +1,22 @@
+2020-01-30T06:26:05.404714+09:00 mail postfix/smtpd[1830]: connect from example.com[127.0.0.1]
+2020-01-30T06:26:05.404714+09:00 mail postfix/smtpd[1830]: C6E0DDB74006: client=example.com[127.0.0.1]
+2020-01-30T06:26:05.404714+09:00 mail postfix/cleanup[1894]: C6E0DDB74006: message-id=<A40CF64D-7F2D-42E4-8A76-CBFFF64A6EB1@example.com>
+2020-01-30T06:26:05.404714+09:00 mail postfix/qmgr[18719]: C6E0DDB74006: from=<test@example.com>, size=309891, nrcpt=1 (queue active)
+2020-01-30T06:26:05.404714+09:00 mail postfix/smtpd[1830]: disconnect from example.com[127.0.0.1]
+2020-01-30T06:26:06.404714+09:00 mail postfix/smtpd[1827]: connect from example.com[127.0.0.1]
+2020-01-30T06:26:06.404714+09:00 mail postfix/smtpd[1827]: 3D74ADB7400B: client=example.com[127.0.0.1]
+2020-01-30T06:26:06.404714+09:00 mail postfix/cleanup[1695]: 3D74ADB7400B: message-id=<f93388828093534f92d85ffe21b2a719@example.info>
+2020-01-30T06:26:06.404714+09:00 mail postfix/smtpd[1827]: disconnect from example.com[127.0.0.1]
+2020-01-30T06:26:06.404714+09:00 mail postfix/qmgr[18719]: 3D74ADB7400B: from=<test2@example.info>, size=2140, nrcpt=1 (queue active)
+2020-01-30T06:26:07.404714+09:00 mail postfix/smtp[1810]: 3D74ADB7400B: to=<test@example.to>, relay=example.to[192.168.0.20]:25, delay=1.7, delays=0.02/0/1.7/0.06, dsn=2.0.0, status=sent (250 [Sniper] OK 1539154772 snipe-queue 10549)
+2020-01-30T06:26:07.404714+09:00 mail postfix/smtp[1810]: 3D74ADB7400B: to=<test2@example.to>, relay=example.to[192.168.0.20]:25, delay=1.7, delays=0.02/0/1.7/0.06, dsn=2.0.0, status=sent (250 [Sniper] OK 1539154772 snipe-queue 10549)
+2020-01-30T06:26:07.404714+09:00 mail postfix/qmgr[18719]: 3D74ADB7400B: removed
+2020-01-30T06:26:08.404714+09:00 mail postfix/smtpd[1830]: connect from example.com[127.0.0.1]
+2020-01-30T06:26:08.404714+09:00 mail postfix/smtpd[1830]: 6526CDB7400B: client=example.com[127.0.0.1]
+2020-01-30T06:26:08.404714+09:00 mail postfix/cleanup[1894]: 6526CDB7400B: message-id=<153915476795520900002087@example.aaa>
+2020-01-30T06:26:08.404714+09:00 mail postfix/smtpd[1830]: disconnect from example.com[127.0.0.1]
+2020-01-30T06:26:08.404714+09:00 mail postfix/qmgr[18719]: 6526CDB7400B: from=<test@example.bbb>, size=4118, nrcpt=1 (queue active)
+2020-01-30T06:26:08.404714+09:00 mail postfix/smtp[1417]: 6526CDB7400B: to=<test@example.ccc>, relay=example.ccc[192.168.0.10]:25, delay=0.1, delays=0.02/0/0.03/0.05, dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as 71111424269E)
+2020-01-30T06:26:08.404714+09:00 mail postfix/qmgr[18719]: 6526CDB7400B: removed
+2020-01-30T06:26:09.404714+09:00 mail postfix/smtp[1874]: C6E0DDB74006: to=<test@example.ddd>, relay=example.ddd[192.168.0.30]:25, delay=3.4, delays=0.11/0/0.38/2.9, dsn=2.0.0, status=sent (250 2.0.0 OK 1539154772 az9-v6si5976496plb.190 - gsmtp)
+2020-01-30T06:26:09.404714+09:00 mail postfix/qmgr[18719]: C6E0DDB74006: removed

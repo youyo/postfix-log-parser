@@ -7,7 +7,8 @@ import (
 
 const (
 	TimeFormat                 = "Jan  2 15:04:05"
-	TimeRegexpFormat           = `([A-Za-z]{3}\s*[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2})`
+	TimeFormatISO8601          = "2006-01-02T15:04:05.999999-07:00"
+	TimeRegexpFormat           = `([A-Za-z]{3}\s*[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2}|^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(?:[+-][0-2]\d:[0-5]\d|Z))`
 	HostRegexpFormat           = `([0-9A-Za-z\.]*)`
 	ProcessRegexpFormat        = `(postfix/[a-z]*\[[0-9]{1,5}\])?`
 	QueueIdRegexpFormat        = `([0-9A-Z]*)`
@@ -45,9 +46,13 @@ func NewPostfixLog() *PostfixLog {
 func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 	re := p.Regexp.Copy()
 	group := re.FindSubmatch(text)
+	var t time.Time
 	t, err := time.ParseInLocation(TimeFormat, string(group[1]), time.Local)
 	if err != nil {
-		return LogFormat{}, err
+		t, err = time.ParseInLocation(TimeFormatISO8601, string(group[1]), time.Local)
+		if err != nil {
+			return LogFormat{}, err
+		}
 	}
 
 	logFormat := LogFormat{

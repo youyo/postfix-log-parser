@@ -11,9 +11,9 @@ const (
 	TimeFormatISO8601          = "2006-01-02T15:04:05.999999-07:00"
 	TimeRegexpFormat           = `([A-Za-z]{3}\s*[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2}|^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(?:[+-][0-2]\d:[0-5]\d|Z))`
 	HostRegexpFormat           = `([0-9A-Za-z\-\.]*)`
-	ProcessRegexpFormat        = `(postfix.*(\/[a-z]*)+\[[0-9]{1,5}\])?`
+	ProcessRegexpFormat        = `(postfix.*(?:\/[a-z]*)+\[[0-9]{1,5}\])?`
 	QueueIdRegexpFormat        = `([0-9A-Z]*)`
-	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\])?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
+	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
 	RegexpFormat               = TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
@@ -31,6 +31,8 @@ type (
 		Messages       string     `json:"messages"`
 		ClientHostname string     `json:"client_hostname"`
 		ClinetIp       string     `json:"client_ip"`
+		SaslMethod     string     `json:"sasl_method"`
+		SaslUsername   string     `json:"sasl_username"`
 		MessageId      string     `json:"message_id"`
 		From           string     `json:"from"`
 		To             string     `json:"to"`
@@ -64,14 +66,16 @@ func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 		Time:           &t,
 		Hostname:       string(group[2]),
 		Process:        string(group[3]),
-		QueueId:        string(group[5]),
-		Messages:       string(group[6]),
-		ClientHostname: string(group[7]),
-		ClinetIp:       string(group[8]),
-		MessageId:      string(group[9]),
-		From:           string(group[10]),
-		To:             string(group[11]),
-		Status:         string(group[12]),
+		QueueId:        string(group[4]),
+		Messages:       string(group[5]),
+		ClientHostname: string(group[6]),
+		ClinetIp:       string(group[7]),
+		SaslMethod:     string(group[8]),
+		SaslUsername:   string(group[9]),
+		MessageId:      string(group[10]),
+		From:           string(group[11]),
+		To:             string(group[12]),
+		Status:         string(group[13]),
 	}
 
 	return logFormat, nil

@@ -22,6 +22,8 @@ type (
 		QueueId        string     `json:"queue_id"`
 		ClientHostname string     `json:"client_hostname"`
 		ClinetIp       string     `json:"client_ip"`
+		SaslMethod     string     `json:"sasl_method"`
+		SaslUsername   string     `json:"sasl_username"`
 		MessageId      string     `json:"message_id"`
 		From           string     `json:"from"`
 		Messages       []Message  `json:"messages"`
@@ -41,6 +43,8 @@ type (
 		QueueId        string     `json:"queue_id"`
 		ClientHostname string     `json:"client_hostname"`
 		ClinetIp       string     `json:"client_ip"`
+		SaslMethod     string     `json:"sasl_method"`
+		SaslUsername   string     `json:"sasl_username"`
 		MessageId      string     `json:"message_id"`
 		From           string     `json:"from"`
 		TimeSent       *time.Time `json:"time_sent"`
@@ -61,6 +65,8 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 			QueueId:        plp.QueueId,
 			ClientHostname: plp.ClientHostname,
 			ClinetIp:       plp.ClinetIp,
+			SaslMethod:     plp.SaslMethod,
+			SaslUsername:   plp.SaslUsername,
 			MessageId:      plp.MessageId,
 			From:           plp.From,
 			TimeSent:       plp.Messages[i].Time,
@@ -137,6 +143,8 @@ func NewCmdRoot() *cobra.Command {
 						QueueId:        logFormat.QueueId,
 						ClientHostname: logFormat.ClientHostname,
 						ClinetIp:       logFormat.ClinetIp,
+						SaslMethod:     logFormat.SaslMethod,
+						SaslUsername:   logFormat.SaslUsername,
 					}
 				}
 

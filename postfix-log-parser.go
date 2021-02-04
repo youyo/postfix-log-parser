@@ -13,7 +13,7 @@ const (
 	ProcessRegexpFormat        = `(postfix.*(\/[a-z]*)+\[[0-9]{1,5}\])?`
 	QueueIdRegexpFormat        = `([0-9A-Z]*)`
 	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\])?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
-	RegexpFormat               = TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `: ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
+	RegexpFormat               = TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
 type (

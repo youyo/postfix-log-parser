@@ -33,9 +33,50 @@ type (
 		Status  string     `json:"status"`
 		Message string     `json:"message"`
 	}
+
+	PostfixLogParserFlat struct {
+		Time           *time.Time `json:"timestamp"`
+		Hostname       string     `json:"hostname"`
+		Process        string     `json:"process"`
+		QueueId        string     `json:"queue_id"`
+		ClientHostname string     `json:"client_hostname"`
+		ClinetIp       string     `json:"client_ip"`
+		MessageId      string     `json:"message_id"`
+		From           string     `json:"from"`
+		TimeSent       *time.Time `json:"time_sent"`
+		To             string     `json:"to"`
+		Status         string     `json:"status"`
+		Message        string     `json:"message"`
+	}
 )
 
+func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
+	//plpf := [len(plp.Messages)]PostfixLogParserFlat{}
+	var plpf = make([]PostfixLogParserFlat, len(plp.Messages))
+
+	for i := range plp.Messages {
+		plpf[i] = PostfixLogParserFlat{
+			Time:           plp.Time,
+			Hostname:       plp.Hostname,
+			Process:        plp.Process,
+			QueueId:        plp.QueueId,
+			ClientHostname: plp.ClientHostname,
+			ClinetIp:       plp.ClinetIp,
+			MessageId:      plp.MessageId,
+			From:           plp.From,
+			TimeSent:       plp.Messages[i].Time,
+			To:             plp.Messages[i].To,
+			Status:         plp.Messages[i].Status,
+			Message:        plp.Messages[i].Message,
+		}
+	}
+
+	return plpf
+}
+
 func NewCmdRoot() *cobra.Command {
+	var flatten bool
+
 	cmd := &cobra.Command{
 		Use:   "postfix-log-parser",
 		Short: "Parse postfix log, and output json format",
@@ -121,19 +162,32 @@ func NewCmdRoot() *cobra.Command {
 				// "removed" message is end of logs. then flush.
 				if logFormat.Messages == "removed" {
 					if plp, ok := m[logFormat.QueueId]; ok {
-						jsonBytes, err := json.Marshal(plp)
-						if err != nil {
-							log.Fatal(err)
+						if flatten {
+							// Flatten the structure, then print each message
+							for _, plpf := range PlpToFlat(plp) {
+								jsonBytes, err := json.Marshal(plpf)
+								if err != nil {
+									log.Fatal(err)
+								}
+								fmt.Fprintln(wtr, string(jsonBytes))
+								wtr.Flush()
+							}
+						} else {
+							jsonBytes, err := json.Marshal(plp)
+							if err != nil {
+								log.Fatal(err)
+							}
+							fmt.Fprintln(wtr, string(jsonBytes))
+							wtr.Flush()
 						}
-
-						fmt.Fprintln(wtr, string(jsonBytes))
-						wtr.Flush()
 					}
 				}
 
 			}
 		},
 	}
+
+	cmd.Flags().BoolVarP(&flatten, "flatten", "f", false, "Flatten output for using with syslog")
 
 	cobra.OnInitialize(initConfig)
 	return cmd

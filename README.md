@@ -45,7 +45,7 @@ Input postfix logs as os stdin.
 Use -f flag to flatten json structure:
 
 ``` console
-# cat /var/log/maillog | ./postfix-log-parser | jq
+# cat /var/log/maillog | ./postfix-log-parser -f | jq
 {
   "time": "0000-10-10T15:59:29+09:00",
   "hostname": "mail",

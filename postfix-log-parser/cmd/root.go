@@ -51,7 +51,6 @@ type (
 )
 
 func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
-	//plpf := [len(plp.Messages)]PostfixLogParserFlat{}
 	var plpf = make([]PostfixLogParserFlat, len(plp.Messages))
 
 	for i := range plp.Messages {
@@ -76,6 +75,8 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 
 func NewCmdRoot() *cobra.Command {
 	var flatten bool
+	var outputFile string
+	var wtr *bufio.Writer
 
 	cmd := &cobra.Command{
 		Use:   "postfix-log-parser",
@@ -89,8 +90,25 @@ func NewCmdRoot() *cobra.Command {
 			// initialize
 			p := postfixlog.NewPostfixLog()
 
-			// writer
-			wtr := bufio.NewWriter(os.Stdout)
+			// writer, either file or stdout
+			if len(outputFile) > 0 {
+				var f *os.File
+				var err error
+				if _, err = os.Stat(outputFile); err == nil {
+					f, err = os.OpenFile(outputFile, os.O_APPEND|os.O_WRONLY, 0640)
+				} else if os.IsNotExist(err) {
+					f, err = os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY, 0640)
+				}
+				if err != nil {
+					cmd.SetOutput(os.Stderr)
+					cmd.Println(err)
+					os.Exit(1)
+				}
+				wtr = bufio.NewWriter(f)
+				defer f.Close()
+			} else {
+				wtr = bufio.NewWriter(os.Stdout)
+			}
 
 			// input stdin
 			scanner := bufio.NewScanner(os.Stdin)
@@ -188,6 +206,7 @@ func NewCmdRoot() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&flatten, "flatten", "f", false, "Flatten output for using with syslog")
+	cmd.Flags().StringVarP(&outputFile, "out", "o", "", "Output to file, append if exists")
 
 	cobra.OnInitialize(initConfig)
 	return cmd

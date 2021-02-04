@@ -79,6 +79,25 @@ Use -f flag to flatten json structure:
 .
 ```
 
+Use "-o filename.json" to write output to file.
+
+## Piping rsyslog to postfix-log-parser
+
+You can feed syslog to postfix-log-parser by using "omprog" rsyslog module, with template "RSYSLOG_FileFormat" :
+``` console
+module(load="omprog")
+[...]
+mail.info                                                       /var/log/maillog
+& action(
+    type="omprog"
+    binary="/usr/local/bin/postfix-log-parser -f -o /var/log/maillog.json"
+    template="RSYSLOG_FileFormat")
+
+& stop
+
+```
+
+
 ## Library usage
 
 ```

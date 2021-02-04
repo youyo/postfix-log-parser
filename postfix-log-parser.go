@@ -13,7 +13,7 @@ const (
 	HostRegexpFormat           = `([0-9A-Za-z\-\.]*)`
 	ProcessRegexpFormat        = `(postfix.*(?:\/[a-z]*)+\[[0-9]{1,5}\])?`
 	QueueIdRegexpFormat        = `([0-9A-Z]*)`
-	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
+	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
 	RegexpFormat               = TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
@@ -35,6 +35,8 @@ type (
 		SaslUsername   string     `json:"sasl_username"`
 		MessageId      string     `json:"message_id"`
 		From           string     `json:"from"`
+		Size           string     `json:"size"`
+		NRcpt          string     `json:"nrcpt"`
 		To             string     `json:"to"`
 		Status         string     `json:"status"`
 	}
@@ -74,8 +76,10 @@ func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 		SaslUsername:   string(group[9]),
 		MessageId:      string(group[10]),
 		From:           string(group[11]),
-		To:             string(group[12]),
-		Status:         string(group[13]),
+		Size:           string(group[12]),
+		NRcpt:          string(group[13]),
+		To:             string(group[14]),
+		Status:         string(group[15]),
 	}
 
 	return logFormat, nil

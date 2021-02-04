@@ -26,6 +26,8 @@ type (
 		SaslUsername   string     `json:"sasl_username"`
 		MessageId      string     `json:"message_id"`
 		From           string     `json:"from"`
+		Size           string     `json:"size"`
+		NRcpt          string     `json:"nrcpt"`
 		Messages       []Message  `json:"messages"`
 	}
 
@@ -47,6 +49,8 @@ type (
 		SaslUsername   string     `json:"sasl_username"`
 		MessageId      string     `json:"message_id"`
 		From           string     `json:"from"`
+		Size           string     `json:"size"`
+		NRcpt          string     `json:"nrcpt"`
 		TimeSent       *time.Time `json:"time_sent"`
 		To             string     `json:"to"`
 		Status         string     `json:"status"`
@@ -69,6 +73,8 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 			SaslUsername:   plp.SaslUsername,
 			MessageId:      plp.MessageId,
 			From:           plp.From,
+			Size:           plp.Size,
+			NRcpt:          plp.NRcpt,
 			TimeSent:       plp.Messages[i].Time,
 			To:             plp.Messages[i].To,
 			Status:         plp.Messages[i].Status,
@@ -133,7 +139,7 @@ func NewCmdRoot() *cobra.Command {
 				}
 
 				/*
-					Oct 10 04:02:02 mail.example.com postfix/smtpd[22941]: DFBEFDBF00C5: client=example.net[127.0.0.1]
+					Oct 10 04:02:02 mail.example.com postfix/smtpd[22941]: DFBEFDBF00C5: client=example.net[127.0.0.1], sasl_method=PLAIN, sasl_username=user@example.com
 				*/
 				if logFormat.ClientHostname != "" {
 					m[logFormat.QueueId] = &PostfixLogParser{
@@ -163,6 +169,8 @@ func NewCmdRoot() *cobra.Command {
 				if logFormat.From != "" {
 					if plp, ok := m[logFormat.QueueId]; ok {
 						plp.From = logFormat.From
+						plp.Size = logFormat.Size
+						plp.NRcpt = logFormat.NRcpt
 					}
 				}
 

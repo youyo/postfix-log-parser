@@ -24,6 +24,8 @@ Input postfix logs as os stdin.
   "sasl_username": "test2@smtp.example.info",
   "message_id": "f93388828093534f92d85ffe21b2a719@example.info",
   "from": "test2@example.info",
+  "size": "1988",
+  "nrcpt": "1",
   "messages": [
     {
       "time": "0000-10-10T15:59:30+09:00",
@@ -59,6 +61,8 @@ Use -f flag to flatten json structure:
   "sasl_username": "test2@smtp.example.info",
   "message_id": "f93388828093534f92d85ffe21b2a719@example.info",
   "from": "test2@example.info",
+  "size": "1988",
+  "nrcpt": "1",
   "time_sent": "0000-10-10T15:59:30+09:00",
   "to": "test@example.to",
   "status": "sent",
@@ -75,6 +79,8 @@ Use -f flag to flatten json structure:
   "sasl_username": "test2@smtp.example.info",
   "message_id": "f93388828093534f92d85ffe21b2a719@example.info",
   "from": "test2@example.info",
+  "size": "1988",
+  "nrcpt": "1",
   "time_sent": "0000-10-10T15:59:30+09:00",
   "to": "test2@example.to",
   "status": "sent",
@@ -141,6 +147,8 @@ postfixlog.LogFormat{
   SaslUsername:   "",
   MessageId:      "",
   From:           "",
+  Size:           "",
+  NRcpt:          "",
   To:             "test@example-to.com",
   Status:         "sent",
 }

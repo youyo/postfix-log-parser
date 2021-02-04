@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	postfixlog "github.com/youyo/postfix-log-parser"
+	postfixlog "github.com/yo000/postfix-log-parser"
 )
 
 func init() {}

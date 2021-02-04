@@ -1,4 +1,4 @@
-module github.com/youyo/postfix-log-parser
+module github.com/yo000/postfix-log-parser
 
 require (
 	github.com/spf13/cobra v0.0.3

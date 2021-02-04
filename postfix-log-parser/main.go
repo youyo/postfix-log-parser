@@ -20,7 +20,7 @@
 
 package main
 
-import "github.com/youyo/postfix-log-parser/postfix-log-parser/cmd"
+import "github.com/yo000/postfix-log-parser/postfix-log-parser/cmd"
 
 func main() {
 	cmd.Execute()

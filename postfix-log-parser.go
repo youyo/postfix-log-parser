@@ -1,6 +1,7 @@
 package postfixlog
 
 import (
+	"errors"
 	"regexp"
 	"time"
 )
@@ -46,6 +47,10 @@ func NewPostfixLog() *PostfixLog {
 func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 	re := p.Regexp.Copy()
 	group := re.FindSubmatch(text)
+	if len(group) == 0 {
+		err := errors.New("Error: Line do not match regex")
+		return LogFormat{}, err
+	}
 	var t time.Time
 	t, err := time.ParseInLocation(TimeFormat, string(group[1]), time.Local)
 	if err != nil {

@@ -58,6 +58,10 @@ func NewCmdRoot() *cobra.Command {
 				// parse log
 				logFormat, err := p.Parse(scanner.Bytes())
 				if err != nil {
+					// Incorrect line, just skip it
+					if err.Error() == "Error: Line do not match regex" {
+						continue
+					}
 					cmd.SetOutput(os.Stderr)
 					cmd.Println(err)
 					os.Exit(1)

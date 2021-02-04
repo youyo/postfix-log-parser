@@ -12,7 +12,7 @@ Download the latest release from github. https://github.com/youyo/postfix-log-pa
 Input postfix logs as os stdin.
 
 ``` console
-# cat /var/log/maillog | ./postfix-log-parser
+# cat /var/log/maillog | ./postfix-log-parser | jq
 {
   "time": "0000-10-10T15:59:29+09:00",
   "hostname": "mail",
@@ -45,7 +45,7 @@ Input postfix logs as os stdin.
 Use -f flag to flatten json structure:
 
 ``` console
-# cat /var/log/maillog | ./postfix-log-parser
+# cat /var/log/maillog | ./postfix-log-parser | jq
 {
   "time": "0000-10-10T15:59:29+09:00",
   "hostname": "mail",

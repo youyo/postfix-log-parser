@@ -73,8 +73,6 @@ Use -f flag to flatten json structure:
   "to": "test2@example.to",
   "status": "sent",
   "message": "to=<test2@example.to>, relay=example.to[192.168.0.20]:25, delay=1.7, delays=0.02/0/1.7/0.06, dsn=2.0.0, status=sent (250 [Sniper] OK 1539154772 snipe-queue 10549)"
-    }
-  ]
 }
 .
 .

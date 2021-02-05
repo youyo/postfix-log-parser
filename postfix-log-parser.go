@@ -19,9 +19,9 @@ const (
 	FromRegexpFormat           = `(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?`
 	ToRegexpFormat             = `(?:to=<(.+@.+)>.*status=([a-z]+))?`
 	SenderNDNRegexpFormat      = `(?:sender non-delivery notification: ([0-9A-Z]*))?`
-	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + `.*)`
-	//MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?(?:to=<(.+@.+)>.*status=([a-z]+))?(?:sender non-delivery notification: ([0-9A-Z]*))?.*)`
-	RegexpFormat = SyslogPri + TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
+	MilterRejectRegexpFormat   = `(?:milter-reject: .* from (.+)\[(.+)\]: .*from=<(.+@.+)> to=<(.+@.+)> .*)?`
+	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + MilterRejectRegexpFormat + `.*)`
+	RegexpFormat               = SyslogPri + TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
 type (
@@ -73,22 +73,32 @@ func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 	}
 
 	logFormat := LogFormat{
-		Time:           &t,
-		Hostname:       string(group[2]),
-		Process:        string(group[3]),
-		QueueId:        string(group[4]),
-		Messages:       string(group[5]),
-		ClientHostname: string(group[6]),
-		ClinetIp:       string(group[7]),
-		SaslMethod:     string(group[8]),
-		SaslUsername:   string(group[9]),
-		MessageId:      string(group[10]),
-		From:           string(group[11]),
-		Size:           string(group[12]),
-		NRcpt:          string(group[13]),
-		To:             string(group[14]),
-		Status:         string(group[15]),
-		BounceId:       string(group[16]),
+		Time:         &t,
+		Hostname:     string(group[2]),
+		Process:      string(group[3]),
+		QueueId:      string(group[4]),
+		Messages:     string(group[5]),
+		SaslMethod:   string(group[8]),
+		SaslUsername: string(group[9]),
+		MessageId:    string(group[10]),
+		Size:         string(group[12]),
+		NRcpt:        string(group[13]),
+		BounceId:     string(group[16]),
+	}
+
+	// Milter reject put values far in the group
+	if len(group[17]) > 0 {
+		logFormat.Status = "milter-reject"
+		logFormat.ClientHostname = string(group[17])
+		logFormat.ClinetIp = string(group[18])
+		logFormat.From = string(group[19])
+		logFormat.To = string(group[20])
+	} else {
+		logFormat.Status = string(group[15])
+		logFormat.ClientHostname = string(group[6])
+		logFormat.ClinetIp = string(group[7])
+		logFormat.From = string(group[11])
+		logFormat.To = string(group[14])
 	}
 
 	return logFormat, nil

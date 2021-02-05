@@ -88,10 +88,32 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 	return plpf
 }
 
+func NewWriter(file string) (*bufio.Writer, error) {
+	var wtr *bufio.Writer
+
+	if len(file) > 0 {
+		var f *os.File
+		var err error
+		if _, err = os.Stat(file); err == nil {
+			f, err = os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0640)
+		} else if os.IsNotExist(err) {
+			f, err = os.OpenFile(file, os.O_CREATE|os.O_WRONLY, 0640)
+		}
+		if err != nil {
+			return nil, err
+		}
+		wtr = bufio.NewWriter(f)
+		defer f.Close()
+	} else {
+		wtr = bufio.NewWriter(os.Stdout)
+	}
+
+	return wtr, nil
+}
+
 func NewCmdRoot() *cobra.Command {
 	var flatten bool
 	var outputFile string
-	var wtr *bufio.Writer
 
 	cmd := &cobra.Command{
 		Use:   "postfix-log-parser",
@@ -105,24 +127,12 @@ func NewCmdRoot() *cobra.Command {
 			// initialize
 			p := postfixlog.NewPostfixLog()
 
-			// writer, either file or stdout
-			if len(outputFile) > 0 {
-				var f *os.File
-				var err error
-				if _, err = os.Stat(outputFile); err == nil {
-					f, err = os.OpenFile(outputFile, os.O_APPEND|os.O_WRONLY, 0640)
-				} else if os.IsNotExist(err) {
-					f, err = os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY, 0640)
-				}
-				if err != nil {
-					cmd.SetOutput(os.Stderr)
-					cmd.Println(err)
-					os.Exit(1)
-				}
-				wtr = bufio.NewWriter(f)
-				defer f.Close()
-			} else {
-				wtr = bufio.NewWriter(os.Stdout)
+			// Get a writer, file or stdout
+			writer, err := NewWriter(outputFile)
+			if err != nil {
+				cmd.SetOutput(os.Stderr)
+				cmd.Println(err)
+				os.Exit(1)
 			}
 
 			// input stdin
@@ -221,9 +231,11 @@ func NewCmdRoot() *cobra.Command {
 				}
 				/*
 					Oct 10 04:02:08 mail.example.com postfix/qmgr[18719]: DFBEFDBF00C5: removed
+						or
+					2021-02-05T14:17:51+01:00 smtp.server.com postfix/cleanup[38982]: D8C136A3A: milter-reject: END-OF-MESSAGE from unknown[1.2.3.4]: 4.7.1 Greylisting in action, try again later; from=<sender1@sender.com> to=<dest1@example.com> proto=ESMTP helo=<mail.sender.com>
 				*/
 				// "removed" message is end of logs. then flush.
-				if logFormat.Messages == "removed" {
+				if logFormat.Messages == "removed" || logFormat.Status == "milter-reject" {
 					if plp, ok := m[logFormat.QueueId]; ok {
 						if flatten {
 							// Flatten the structure, then print each message
@@ -232,16 +244,16 @@ func NewCmdRoot() *cobra.Command {
 								if err != nil {
 									log.Fatal(err)
 								}
-								fmt.Fprintln(wtr, string(jsonBytes))
-								wtr.Flush()
+								fmt.Fprintln(writer, string(jsonBytes))
+								writer.Flush()
 							}
 						} else {
 							jsonBytes, err := json.Marshal(plp)
 							if err != nil {
 								log.Fatal(err)
 							}
-							fmt.Fprintln(wtr, string(jsonBytes))
-							wtr.Flush()
+							fmt.Fprintln(writer, string(jsonBytes))
+							writer.Flush()
 						}
 					}
 				}

@@ -39,7 +39,7 @@ type (
 	}
 
 	PostfixLogParserFlat struct {
-		Time           *time.Time `json:"timestamp"`
+		Time           *time.Time `json:"time"`
 		Hostname       string     `json:"hostname"`
 		Process        string     `json:"process"`
 		QueueId        string     `json:"queue_id"`

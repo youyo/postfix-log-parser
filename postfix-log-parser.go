@@ -14,8 +14,14 @@ const (
 	HostRegexpFormat           = `([0-9A-Za-z\-\.]*)`
 	ProcessRegexpFormat        = `(postfix.*(?:\/[a-z]*)+\[[0-9]{1,5}\])?`
 	QueueIdRegexpFormat        = `([0-9A-Z]*)`
-	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
-	RegexpFormat               = SyslogPri + TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
+	ClientRegexpFormat         = `(?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?`
+	MessageIdRegexpFormat      = `(?:message-id=<(.+)>)?`
+	FromRegexpFormat           = `(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?`
+	ToRegexpFormat             = `(?:to=<(.+@.+)>.*status=([a-z]+))?`
+	SenderNDNRegexpFormat      = `(?:sender non-delivery notification: ([0-9A-Z]*))?`
+	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + `.*)`
+	//MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\](?:, sasl_method=(.+), sasl_username=(.+))?)?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?(?:to=<(.+@.+)>.*status=([a-z]+))?(?:sender non-delivery notification: ([0-9A-Z]*))?.*)`
+	RegexpFormat = SyslogPri + TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
 type (
@@ -40,6 +46,7 @@ type (
 		NRcpt          string     `json:"nrcpt"`
 		To             string     `json:"to"`
 		Status         string     `json:"status"`
+		BounceId       string     `json:"bounce_id"`
 	}
 )
 
@@ -81,6 +88,7 @@ func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 		NRcpt:          string(group[13]),
 		To:             string(group[14]),
 		Status:         string(group[15]),
+		BounceId:       string(group[16]),
 	}
 
 	return logFormat, nil

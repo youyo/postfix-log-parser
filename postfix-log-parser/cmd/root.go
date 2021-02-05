@@ -32,10 +32,11 @@ type (
 	}
 
 	Message struct {
-		Time    *time.Time `json:"time"`
-		To      string     `json:"to"`
-		Status  string     `json:"status"`
-		Message string     `json:"message"`
+		Time     *time.Time `json:"time"`
+		To       string     `json:"to"`
+		Status   string     `json:"status"`
+		Message  string     `json:"message"`
+		BounceId string     `json:"bounce_id"`
 	}
 
 	PostfixLogParserFlat struct {
@@ -55,6 +56,7 @@ type (
 		To             string     `json:"to"`
 		Status         string     `json:"status"`
 		Message        string     `json:"message"`
+		BounceId       string     `json:"bounce_id"`
 	}
 )
 
@@ -79,6 +81,7 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 			To:             plp.Messages[i].To,
 			Status:         plp.Messages[i].Status,
 			Message:        plp.Messages[i].Message,
+			BounceId:       plp.Messages[i].BounceId,
 		}
 	}
 
@@ -180,16 +183,42 @@ func NewCmdRoot() *cobra.Command {
 				if logFormat.To != "" {
 					if plp, ok := m[logFormat.QueueId]; ok {
 						message := Message{
-							Time:    logFormat.Time,
-							To:      logFormat.To,
-							Status:  logFormat.Status,
-							Message: logFormat.Messages,
+							Time:     logFormat.Time,
+							To:       logFormat.To,
+							Status:   logFormat.Status,
+							Message:  logFormat.Messages,
+							BounceId: "",
 						}
 
 						plp.Messages = append(plp.Messages, message)
 					}
 				}
 
+				/*
+					2021-02-05T17:25:03+01:00 mail.example.com postfix/bounce[39258]: 006B056E6: sender non-delivery notification: 642E456E9
+				*/
+				if logFormat.BounceId != "" {
+					if plp, ok := m[logFormat.QueueId]; ok {
+						// Get the matching Message by Status=bounced
+						for i, msg := range plp.Messages {
+							//fmt.Println("Dans le parcours message de ", plp.QueueId)
+							// Need to manage more than one bounce for the same queue_id. This is flawy as we just rely on order to match
+							if msg.Status == "bounced" && len(msg.BounceId) == 0 {
+								message := Message{
+									Time:     msg.Time,
+									To:       msg.To,
+									Status:   msg.Status,
+									Message:  msg.Message,
+									BounceId: logFormat.BounceId,
+								}
+								// Delete old message, put new at the end
+								copy(plp.Messages[i:], plp.Messages[i+1:])
+								plp.Messages[len(plp.Messages)-1] = message
+								break
+							}
+						}
+					}
+				}
 				/*
 					Oct 10 04:02:08 mail.example.com postfix/qmgr[18719]: DFBEFDBF00C5: removed
 				*/

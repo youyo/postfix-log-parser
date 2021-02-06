@@ -88,7 +88,7 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 	return plpf
 }
 
-func NewWriter(file string) (*bufio.Writer, error) {
+func NewWriter(file string) (*bufio.Writer, *os.File, error) {
 	var wtr *bufio.Writer
 
 	if len(file) > 0 {
@@ -100,15 +100,14 @@ func NewWriter(file string) (*bufio.Writer, error) {
 			f, err = os.OpenFile(file, os.O_CREATE|os.O_WRONLY, 0640)
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		wtr = bufio.NewWriter(f)
-		defer f.Close()
+		return wtr, f, nil
 	} else {
 		wtr = bufio.NewWriter(os.Stdout)
+		return wtr, nil, nil
 	}
-
-	return wtr, nil
 }
 
 func NewCmdRoot() *cobra.Command {
@@ -128,7 +127,7 @@ func NewCmdRoot() *cobra.Command {
 			p := postfixlog.NewPostfixLog()
 
 			// Get a writer, file or stdout
-			writer, err := NewWriter(outputFile)
+			writer, file, err := NewWriter(outputFile)
 			if err != nil {
 				cmd.SetOutput(os.Stderr)
 				cmd.Println(err)
@@ -211,7 +210,6 @@ func NewCmdRoot() *cobra.Command {
 					if plp, ok := m[logFormat.QueueId]; ok {
 						// Get the matching Message by Status=bounced
 						for i, msg := range plp.Messages {
-							//fmt.Println("Dans le parcours message de ", plp.QueueId)
 							// Need to manage more than one bounce for the same queue_id. This is flawy as we just rely on order to match
 							if msg.Status == "bounced" && len(msg.BounceId) == 0 {
 								message := Message{
@@ -258,6 +256,9 @@ func NewCmdRoot() *cobra.Command {
 					}
 				}
 
+			}
+			if file != nil {
+				file.Close()
 			}
 		},
 	}

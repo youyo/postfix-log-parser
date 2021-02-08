@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/tabalt/pidfile"
 	postfixlog "github.com/yo000/postfix-log-parser"
 )
 
@@ -60,6 +64,9 @@ type (
 	}
 )
 
+var File os.File
+var Writer *bufio.Writer
+
 func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 	var plpf = make([]PostfixLogParserFlat, len(plp.Messages))
 
@@ -89,8 +96,6 @@ func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 }
 
 func NewWriter(file string) (*bufio.Writer, *os.File, error) {
-	var wtr *bufio.Writer
-
 	if len(file) > 0 {
 		var f *os.File
 		var err error
@@ -102,23 +107,56 @@ func NewWriter(file string) (*bufio.Writer, *os.File, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		wtr = bufio.NewWriter(f)
-		return wtr, f, nil
+		Writer = bufio.NewWriter(f)
+		return Writer, f, nil
 	} else {
-		wtr = bufio.NewWriter(os.Stdout)
-		return wtr, nil, nil
+		Writer = bufio.NewWriter(os.Stdout)
+		return Writer, nil, nil
 	}
+}
+
+//func writeOut(wrt *bufio.Writer, msg string, filename string, m sync.Mutex) error {
+func writeOut(msg string, filename string, m sync.Mutex) error {
+	if len(filename) > 0 {
+		m.Lock()
+	}
+	_, err := fmt.Fprintln(Writer, msg)
+	if err != nil {
+		if len(filename) > 0 {
+			m.Unlock()
+		}
+		return err
+	}
+	err = Writer.Flush()
+	if len(filename) > 0 {
+		m.Unlock()
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewCmdRoot() *cobra.Command {
 	var flatten bool
 	var outputFile string
+	var pidfilepath string
+	var mtx sync.Mutex
 
 	cmd := &cobra.Command{
 		Use:   "postfix-log-parser",
 		Short: "Parse postfix log, and output json format",
 		//Long: ``,
 		Run: func(cmd *cobra.Command, args []string) {
+
+			if len(pidfilepath) > 0 {
+				if pid, err := pidfile.Create(pidfilepath); err != nil {
+					log.Fatal(err)
+				} else {
+					defer pid.Clear()
+				}
+			}
 
 			// create queue
 			m := make(map[string]*PostfixLogParser)
@@ -127,11 +165,32 @@ func NewCmdRoot() *cobra.Command {
 			p := postfixlog.NewPostfixLog()
 
 			// Get a writer, file or stdout
-			writer, file, err := NewWriter(outputFile)
+			Writer, File, err := NewWriter(outputFile)
 			if err != nil {
 				cmd.SetOutput(os.Stderr)
 				cmd.Println(err)
 				os.Exit(1)
+			}
+
+			// Manage output file rotation when receiving SIGUSR1
+			if len(outputFile) > 0 {
+				sig := make(chan os.Signal)
+				signal.Notify(sig, syscall.SIGUSR1)
+				go func() {
+					for {
+						<-sig
+						fmt.Println("SIGUSR1 received, recreate output file")
+						mtx.Lock()
+						File.Close()
+						Writer, File, err = NewWriter(outputFile)
+						if err != nil {
+							cmd.SetOutput(os.Stderr)
+							cmd.Println(err)
+							os.Exit(1)
+						}
+						mtx.Unlock()
+					}
+				}()
 			}
 
 			// input stdin
@@ -242,29 +301,37 @@ func NewCmdRoot() *cobra.Command {
 								if err != nil {
 									log.Fatal(err)
 								}
-								fmt.Fprintln(writer, string(jsonBytes))
-								writer.Flush()
+								//err = writeOut(Writer, string(jsonBytes), outputFile, mtx)
+								err = writeOut(string(jsonBytes), outputFile, mtx)
+								if err != nil {
+									log.Fatal(err)
+								}
 							}
 						} else {
 							jsonBytes, err := json.Marshal(plp)
 							if err != nil {
 								log.Fatal(err)
 							}
-							fmt.Fprintln(writer, string(jsonBytes))
-							writer.Flush()
+							//err = writeOut(Writer, string(jsonBytes), outputFile, mtx)
+							err = writeOut(string(jsonBytes), outputFile, mtx)
+							if err != nil {
+								log.Fatal(err)
+							}
 						}
 					}
 				}
-
 			}
-			if file != nil {
-				file.Close()
+			if File != nil {
+				mtx.Lock()
+				File.Close()
+				mtx.Unlock()
 			}
 		},
 	}
 
 	cmd.Flags().BoolVarP(&flatten, "flatten", "f", false, "Flatten output for using with syslog")
 	cmd.Flags().StringVarP(&outputFile, "out", "o", "", "Output to file, append if exists")
+	cmd.Flags().StringVarP(&pidfilepath, "pidfile", "p", "", "pid file path")
 
 	cobra.OnInitialize(initConfig)
 	return cmd

@@ -115,26 +115,11 @@ func NewWriter(file string) (*bufio.Writer, *os.File, error) {
 	}
 }
 
-//func writeOut(wrt *bufio.Writer, msg string, filename string, m sync.Mutex) error {
-func writeOut(msg string, filename string, m sync.Mutex) error {
-	if len(filename) > 0 {
-		m.Lock()
-	}
+func writeOut(msg string, filename string) error {
 	_, err := fmt.Fprintln(Writer, msg)
 	if err != nil {
-		if len(filename) > 0 {
-			m.Unlock()
-		}
 		return err
 	}
-	err = Writer.Flush()
-	if len(filename) > 0 {
-		m.Unlock()
-	}
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -179,11 +164,13 @@ func NewCmdRoot() *cobra.Command {
 				go func() {
 					for {
 						<-sig
-						fmt.Println("SIGUSR1 received, recreate output file")
 						mtx.Lock()
+						fmt.Println("SIGUSR1 received, recreating output file")
+						//Writer.Flush()	// Done by File.CLose()
 						File.Close()
 						Writer, File, err = NewWriter(outputFile)
 						if err != nil {
+							mtx.Unlock()
 							cmd.SetOutput(os.Stderr)
 							cmd.Println(err)
 							os.Exit(1)
@@ -258,7 +245,48 @@ func NewCmdRoot() *cobra.Command {
 							BounceId: "",
 						}
 
-						plp.Messages = append(plp.Messages, message)
+						/* When a message is deferred, it won't be written out until it is either sent, expired, or generates a non delivery notification.
+						    We want to know instantly when a message is deferred, so we handle this case by emiting output for this message, and not appending this occurence
+							to the list of Messages
+						*/
+						if logFormat.Status == "deferred" {
+							tmpplp := PostfixLogParser{
+								Time:           plp.Time,
+								Hostname:       plp.Hostname,
+								Process:        plp.Process,
+								QueueId:        plp.QueueId,
+								ClientHostname: plp.ClientHostname,
+								ClinetIp:       plp.ClinetIp,
+								SaslMethod:     plp.SaslMethod,
+								SaslUsername:   plp.SaslUsername,
+								MessageId:      plp.MessageId,
+								From:           plp.From,
+								Size:           plp.Size,
+								NRcpt:          plp.NRcpt,
+							}
+							tmpplp.Messages = append(tmpplp.Messages, message)
+
+							var jsonBytes []byte
+							if flatten {
+								jsonBytes, err = json.Marshal(PlpToFlat(&tmpplp))
+							} else {
+								jsonBytes, err = json.Marshal(tmpplp)
+							}
+							if err != nil {
+								log.Fatal(err)
+							}
+							mtx.Lock()
+							err = writeOut(string(jsonBytes), outputFile)
+							mtx.Unlock()
+							if err != nil {
+								log.Fatal(err)
+							}
+							tmpplp.Messages = nil
+							// cannot use nil as type PostfixLogParser in assignment
+							//tmpplp = nil
+						} else {
+							plp.Messages = append(plp.Messages, message)
+						}
 					}
 				}
 
@@ -301,8 +329,9 @@ func NewCmdRoot() *cobra.Command {
 								if err != nil {
 									log.Fatal(err)
 								}
-								//err = writeOut(Writer, string(jsonBytes), outputFile, mtx)
-								err = writeOut(string(jsonBytes), outputFile, mtx)
+								mtx.Lock()
+								err = writeOut(string(jsonBytes), outputFile)
+								mtx.Unlock()
 								if err != nil {
 									log.Fatal(err)
 								}
@@ -312,8 +341,9 @@ func NewCmdRoot() *cobra.Command {
 							if err != nil {
 								log.Fatal(err)
 							}
-							//err = writeOut(Writer, string(jsonBytes), outputFile, mtx)
-							err = writeOut(string(jsonBytes), outputFile, mtx)
+							mtx.Lock()
+							err = writeOut(string(jsonBytes), outputFile)
+							mtx.Unlock()
 							if err != nil {
 								log.Fatal(err)
 							}

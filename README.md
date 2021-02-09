@@ -5,7 +5,7 @@ Parse postfix log, and output json format
 ## Install
 
 Place a `postfix-log-parser` command to your PATH and set an executable flag.  
-Download the latest release from github. https://github.com/youyo/postfix-log-parser/releases/latest
+Download the latest release from github. https://github.com/yo000/postfix-log-parser/releases/latest
 
 ## Usage
 

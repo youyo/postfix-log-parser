@@ -117,6 +117,7 @@ func NewWriter(file string) (*bufio.Writer, *os.File, error) {
 
 func writeOut(msg string, filename string) error {
 	_, err := fmt.Fprintln(Writer, msg)
+	Writer.Flush()
 	if err != nil {
 		return err
 	}

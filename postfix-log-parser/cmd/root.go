@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -321,7 +322,7 @@ func NewCmdRoot() *cobra.Command {
 					2021-02-05T14:17:51+01:00 smtp.server.com postfix/cleanup[38982]: D8C136A3A: milter-reject: END-OF-MESSAGE from unknown[1.2.3.4]: 4.7.1 Greylisting in action, try again later; from=<sender1@sender.com> to=<dest1@example.com> proto=ESMTP helo=<mail.sender.com>
 				*/
 				// "removed" message is end of logs. then flush.
-				if logFormat.Messages == "removed" || logFormat.Status == "milter-reject" {
+				if logFormat.Messages == "removed" || strings.HasPrefix(logFormat.Status, "milter-") {
 					if plp, ok := m[logFormat.QueueId]; ok {
 						if flatten {
 							// Flatten the structure, then print each message

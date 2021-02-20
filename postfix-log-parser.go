@@ -19,8 +19,8 @@ const (
 	FromRegexpFormat           = `(?:from=<(.+@.+)>(?:, size=(\d+), nrcpt=(\d+))?)?`
 	ToRegexpFormat             = `(?:to=<(.+@.+)>.*status=([a-z]+))?`
 	SenderNDNRegexpFormat      = `(?:sender non-delivery notification: ([0-9A-Z]*))?`
-	MilterRejectRegexpFormat   = `(?:milter-reject: .* from (.+)\[(.+)\]: .*from=<(.+@.+)> to=<(.+@.+)> .*)?`
-	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + MilterRejectRegexpFormat + `.*)`
+	MilterRegexpFormat         = `(?:(milter-.*): .* from (.+)\[(.+)\]: .*from=<(.+@.+)?> to=<(.+@.+)> .*)?`
+	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + MilterRegexpFormat + `.*)`
 	RegexpFormat               = SyslogPri + TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
@@ -86,13 +86,13 @@ func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 		BounceId:     string(group[16]),
 	}
 
-	// Milter reject put values far in the group
+	// Milter reject|hold put values far in the group
 	if len(group[17]) > 0 {
-		logFormat.Status = "milter-reject"
-		logFormat.ClientHostname = string(group[17])
-		logFormat.ClinetIp = string(group[18])
-		logFormat.From = string(group[19])
-		logFormat.To = string(group[20])
+		logFormat.Status = string(group[17])
+		logFormat.ClientHostname = string(group[18])
+		logFormat.ClinetIp = string(group[19])
+		logFormat.From = string(group[20])
+		logFormat.To = string(group[21])
 	} else {
 		logFormat.Status = string(group[15])
 		logFormat.ClientHostname = string(group[6])

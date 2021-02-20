@@ -1,0 +1,6 @@
+2021-02-06T10:57:57+01:00 mail.server.com postfix/smtpd[59633]: D6DDA23B0F: client=unknown[99.88.77.66]
+2021-02-06T10:57:57+01:00 mail.server.com postfix/cleanup[59586]: D6DDA23B0F: message-id=<20210206095814.2B34E19A19F6@host.sender.domain>
+2021-02-06T10:57:58+01:00 mail.server.com postfix/cleanup[59586]: D6DDA23B0F: milter-reject: END-OF-MESSAGE from unknown[99.88.77.66]: 4.7.1 Greylisting in action, try again later; from=<user2@example.com> to=<some.dest@destdomain.com> proto=ESMTP helo=<host.sender.domain>
+2021-02-19T14:32:14.936091+01:00 smtp01.example.org postfix/smtpd[58176] E89FA2DEDA: client=srv05.source.com[10.11.12.13]
+2021-02-19T14:32:14.938357+01:00 smtp01.example.org postfix/cleanup[52106] E89FA2DEDA: message-id=<20210219133213.5D10C499CA@srv.domain.org>
+2021-02-19T14:32:14.976132+01:00 smtp01.example.org postfix/cleanup[52106] E89FA2DEDA: milter-hold: END-OF-MESSAGE from srv05.source.com[10.11.12.13]: milter triggers HOLD action; from=<> to=<this_user@this.domain.com> proto=ESMTP helo=<this.domain.com>

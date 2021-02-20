@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -12,6 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/tabalt/pidfile"
 	postfixlog "github.com/yo000/postfix-log-parser"
@@ -65,8 +69,47 @@ type (
 	}
 )
 
-var File os.File
-var Writer *bufio.Writer
+var (
+	File   os.File
+	Writer *bufio.Writer
+
+	StartTime = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "postfixlogparser_uptime_seconds",
+		Help: "Process uptime in seconds",
+	})
+	LineReadCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_line_read_count",
+		Help: "Number of lines read",
+	})
+	LineIncorrectCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_line_incorrect_count",
+		Help: "Number of lines with incorrect format",
+	})
+	LineOutCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_line_out_count",
+		Help: "Number of lines written to ouput",
+	})
+	MsgSentCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_msg_sent_count",
+		Help: "Number of mails sent",
+	})
+	MsgDeferredCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_msg_deferred_count",
+		Help: "Number of mails deferred",
+	})
+	MsgBouncedCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_msg_bounced_count",
+		Help: "Number of mails bounced",
+	})
+	MsgRejectedCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_msg_rejected_count",
+		Help: "Number of mails rejected",
+	})
+	MsgHoldCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_msg_hold_count",
+		Help: "Number of mails hold",
+	})
+)
 
 func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
 	var plpf = make([]PostfixLogParserFlat, len(plp.Messages))
@@ -122,13 +165,16 @@ func writeOut(msg string, filename string) error {
 	if err != nil {
 		return err
 	}
+	LineOutCnt.Inc()
 	return nil
 }
 
 func NewCmdRoot() *cobra.Command {
 	var flatten bool
 	var outputFile string
-	var pidfilepath string
+	var pidFilePath string
+	var promListenAddress string
+	var promMetricPath string
 	var mtx sync.Mutex
 
 	cmd := &cobra.Command{
@@ -137,8 +183,29 @@ func NewCmdRoot() *cobra.Command {
 		//Long: ``,
 		Run: func(cmd *cobra.Command, args []string) {
 
-			if len(pidfilepath) > 0 {
-				if pid, err := pidfile.Create(pidfilepath); err != nil {
+			StartTime.Set(float64(time.Now().Unix()))
+
+			// Prometheus exporter
+			if promListenAddress != "do-not-listen" {
+				go func() {
+					http.Handle(promMetricPath, promhttp.Handler())
+					http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte(`
+							<html>
+							<head><title>Postfix-log-parser Exporter</title></head>
+							<body>
+							<h1>Postfix-log-parser Exporter</h1>
+							<p><a href='` + promMetricPath + `'>Metrics</a></p>
+							</body>
+							</html>`))
+					})
+					log.Fatal(http.ListenAndServe(promListenAddress, nil))
+				}()
+			}
+
+			// Create PID file
+			if len(pidFilePath) > 0 {
+				if pid, err := pidfile.Create(pidFilePath); err != nil {
 					log.Fatal(err)
 				} else {
 					defer pid.Clear()
@@ -185,12 +252,14 @@ func NewCmdRoot() *cobra.Command {
 			// input stdin
 			scanner := bufio.NewScanner(os.Stdin)
 			for scanner.Scan() {
+				LineReadCnt.Inc()
 
 				// parse log
 				logFormat, err := p.Parse(scanner.Bytes())
 				if err != nil {
 					// Incorrect line, just skip it
 					if err.Error() == "Error: Line do not match regex" {
+						LineIncorrectCnt.Inc()
 						continue
 					}
 					cmd.SetOutput(os.Stderr)
@@ -252,6 +321,7 @@ func NewCmdRoot() *cobra.Command {
 							to the list of Messages
 						*/
 						if logFormat.Status == "deferred" {
+							MsgDeferredCnt.Inc()
 							tmpplp := PostfixLogParser{
 								Time:           plp.Time,
 								Hostname:       plp.Hostname,
@@ -324,9 +394,19 @@ func NewCmdRoot() *cobra.Command {
 				// "removed" message is end of logs. then flush.
 				if logFormat.Messages == "removed" || strings.HasPrefix(logFormat.Status, "milter-") {
 					if plp, ok := m[logFormat.QueueId]; ok {
-						if flatten {
-							// Flatten the structure, then print each message
-							for _, plpf := range PlpToFlat(plp) {
+						for _, plpf := range PlpToFlat(plp) {
+							switch plpf.Status {
+							case "sent":
+								MsgSentCnt.Inc()
+							case "milter-reject":
+								MsgRejectedCnt.Inc()
+							case "milter-hold":
+								MsgHoldCnt.Inc()
+							case "bounced":
+								MsgBouncedCnt.Inc()
+							}
+
+							if flatten {
 								jsonBytes, err := json.Marshal(plpf)
 								if err != nil {
 									log.Fatal(err)
@@ -338,7 +418,9 @@ func NewCmdRoot() *cobra.Command {
 									log.Fatal(err)
 								}
 							}
-						} else {
+						}
+
+						if !flatten {
 							jsonBytes, err := json.Marshal(plp)
 							if err != nil {
 								log.Fatal(err)
@@ -363,7 +445,9 @@ func NewCmdRoot() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&flatten, "flatten", "f", false, "Flatten output for using with syslog")
 	cmd.Flags().StringVarP(&outputFile, "out", "o", "", "Output to file, append if exists")
-	cmd.Flags().StringVarP(&pidfilepath, "pidfile", "p", "", "pid file path")
+	cmd.Flags().StringVarP(&pidFilePath, "pidfile", "p", "", "pid file path")
+	cmd.Flags().StringVarP(&promListenAddress, "web.listen-address", "l", "do-not-listen", "Address to listen on for web interface and telemetry")
+	cmd.Flags().StringVarP(&promMetricPath, "web.telemetry-path", "m", "/metrics", "Path under which to expose metrics.")
 
 	cobra.OnInitialize(initConfig)
 	return cmd

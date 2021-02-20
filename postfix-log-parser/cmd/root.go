@@ -270,7 +270,7 @@ func NewCmdRoot() *cobra.Command {
 
 							var jsonBytes []byte
 							if flatten {
-								jsonBytes, err = json.Marshal(PlpToFlat(&tmpplp))
+								jsonBytes, err = json.Marshal(PlpToFlat(&tmpplp)[0])
 							} else {
 								jsonBytes, err = json.Marshal(tmpplp)
 							}

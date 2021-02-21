@@ -92,10 +92,10 @@ var (
 		Name: "postfixlogparser_line_incorrect_count",
 		Help: "Number of lines with incorrect format",
 	})
-	LineOutCnt = promauto.NewCounter(prometheus.CounterOpts{
+	LineOutCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_line_out_count",
 		Help: "Number of lines written to ouput",
-	})
+	}, []string{"host"})
 	MsgSentCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_sent_count",
 		Help: "Number of mails sent",
@@ -172,7 +172,11 @@ func writeOut(msg string, filename string) error {
 	if err != nil {
 		return err
 	}
-	LineOutCnt.Inc()
+
+	var tmpPlp PostfixLogParser
+	json.Unmarshal([]byte(msg), &tmpPlp)
+	LineOutCnt.WithLabelValues(tmpPlp.Hostname).Inc()
+
 	return nil
 }
 

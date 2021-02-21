@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,9 +74,15 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
+	Version = "1.2.5"
+
+	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "postfixlogparser_build_info",
+		Help: "Constant 1 value labeled by version and goversion from which postfix-log-parser was built",
+	}, []string{"version", "goversion"})
 	StartTime = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "postfixlogparser_uptime_seconds",
-		Help: "Process uptime in seconds",
+		Name: "postfixlogparser_time_start_seconds",
+		Help: "Process start time in UNIX timestamp (seconds)",
 	})
 	LineReadCnt = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "postfixlogparser_line_read_count",
@@ -89,26 +96,26 @@ var (
 		Name: "postfixlogparser_line_out_count",
 		Help: "Number of lines written to ouput",
 	})
-	MsgSentCnt = promauto.NewCounter(prometheus.CounterOpts{
+	MsgSentCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_sent_count",
 		Help: "Number of mails sent",
-	})
-	MsgDeferredCnt = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"host"})
+	MsgDeferredCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_deferred_count",
 		Help: "Number of mails deferred",
-	})
-	MsgBouncedCnt = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"host"})
+	MsgBouncedCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_bounced_count",
 		Help: "Number of mails bounced",
-	})
-	MsgRejectedCnt = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"host"})
+	MsgRejectedCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_rejected_count",
 		Help: "Number of mails rejected",
-	})
-	MsgHoldCnt = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"host"})
+	MsgHoldCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_hold_count",
 		Help: "Number of mails hold",
-	})
+	}, []string{"host"})
 )
 
 func PlpToFlat(plp *PostfixLogParser) []PostfixLogParserFlat {
@@ -183,6 +190,7 @@ func NewCmdRoot() *cobra.Command {
 		//Long: ``,
 		Run: func(cmd *cobra.Command, args []string) {
 
+			BuildInfo.WithLabelValues(Version, runtime.Version()).Set(1)
 			StartTime.Set(float64(time.Now().Unix()))
 
 			// Prometheus exporter
@@ -321,7 +329,7 @@ func NewCmdRoot() *cobra.Command {
 							to the list of Messages
 						*/
 						if logFormat.Status == "deferred" {
-							MsgDeferredCnt.Inc()
+							MsgDeferredCnt.WithLabelValues(plp.Hostname).Inc()
 							tmpplp := PostfixLogParser{
 								Time:           plp.Time,
 								Hostname:       plp.Hostname,
@@ -397,13 +405,13 @@ func NewCmdRoot() *cobra.Command {
 						for _, plpf := range PlpToFlat(plp) {
 							switch plpf.Status {
 							case "sent":
-								MsgSentCnt.Inc()
+								MsgSentCnt.WithLabelValues(plpf.Hostname).Inc()
 							case "milter-reject":
-								MsgRejectedCnt.Inc()
+								MsgRejectedCnt.WithLabelValues(plpf.Hostname).Inc()
 							case "milter-hold":
-								MsgHoldCnt.Inc()
+								MsgHoldCnt.WithLabelValues(plpf.Hostname).Inc()
 							case "bounced":
-								MsgBouncedCnt.Inc()
+								MsgBouncedCnt.WithLabelValues(plpf.Hostname).Inc()
 							}
 
 							if flatten {

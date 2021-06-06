@@ -10,8 +10,8 @@ const (
 	TimeFormatISO8601          = "2006-01-02T15:04:05.999999-07:00"
 	TimeRegexpFormat           = `([A-Za-z]{3}\s*[0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2}|^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+(?:[+-][0-2]\d:[0-5]\d|Z))`
 	HostRegexpFormat           = `([0-9A-Za-z\.]*)`
-	ProcessRegexpFormat        = `(postfix/[a-z]*\[[0-9]{1,5}\])?`
-	QueueIdRegexpFormat        = `([0-9A-Z]*)`
+	ProcessRegexpFormat        = `(postfix/[\w\-]+\[[0-9]{1,5}\])?`
+	QueueIdRegexpFormat        = `([\d\w]*)`
 	MessageDetailsRegexpFormat = `((?:client=(.+)\[(.+)\])?(?:message-id=<(.+)>)?(?:from=<(.+@.+)>)?(?:to=<(.+@.+)>.*status=([a-z]+))?.*)`
 	RegexpFormat               = TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `: ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )

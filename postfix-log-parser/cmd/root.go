@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -74,7 +75,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.2.5.2"
+	Version = "1.2.5.3"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -297,7 +298,6 @@ func NewCmdRoot() *cobra.Command {
 						SaslMethod:     logFormat.SaslMethod,
 						SaslUsername:   logFormat.SaslUsername,
 					}
-					MsgInCnt.WithLabelValues(logFormat.Hostname).Inc()
 				}
 
 				/*
@@ -318,6 +318,8 @@ func NewCmdRoot() *cobra.Command {
 						plp.Size = logFormat.Size
 						plp.NRcpt = logFormat.NRcpt
 					}
+					nrcpt,_ := strconv.ParseFloat(logFormat.NRcpt, 64)
+					MsgInCnt.WithLabelValues(logFormat.Hostname).Add(nrcpt)
 				}
 
 				/*

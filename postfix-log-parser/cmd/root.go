@@ -74,7 +74,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.2.5.1"
+	Version = "1.2.5.2"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -95,6 +95,10 @@ var (
 	LineOutCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_line_out_count",
 		Help: "Number of lines written to ouput",
+	}, []string{"host"})
+	MsgInCnt = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "postfixlogparser_msg_in_count",
+		Help: "Number of mails accepted by smtpd",
 	}, []string{"host"})
 	MsgSentCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_sent_count",
@@ -293,6 +297,7 @@ func NewCmdRoot() *cobra.Command {
 						SaslMethod:     logFormat.SaslMethod,
 						SaslUsername:   logFormat.SaslUsername,
 					}
+					MsgInCnt.WithLabelValues(logFormat.Hostname).Inc()
 				}
 
 				/*

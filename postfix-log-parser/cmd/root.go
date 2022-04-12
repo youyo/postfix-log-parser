@@ -75,7 +75,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.2.5.3"
+	Version = "1.2.6"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -185,6 +185,32 @@ func writeOut(msg string, filename string) error {
 	return nil
 }
 
+
+// Every 24H, remove sent, milter-rejected and deferred that entered queue more than 5 days ago
+func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser) {
+	var ok int
+
+	for range time.Tick(time.Hour * 24) {
+		for _, inmail := range mqueue {
+			ok = 0
+			// Check all mails were sent (multiple destinations mails)
+			//  or rejected
+			for _, outmail := range inmail.Messages {
+				if outmail.Status == "sent" || outmail.Status == "milter-reject" {
+					ok += 1
+				} else if outmail.Status == "deferred" {
+					if inmail.Time.Add(time.Hour * 5 * 24).Before(time.Now()) {
+						ok += 1
+					}
+				}
+			}
+			if ok == len(inmail.Messages) {
+				delete(mqueue, inmail.MessageId)
+			}
+		}
+	}
+}
+
 func NewCmdRoot() *cobra.Command {
 	var flatten bool
 	var outputFile string
@@ -266,6 +292,9 @@ func NewCmdRoot() *cobra.Command {
 				}()
 			}
 
+			// Cleaner thread
+			go periodicallyCleanMQueue(m)
+
 			// input stdin
 			scanner := bufio.NewScanner(os.Stdin)
 			for scanner.Scan() {
@@ -287,7 +316,7 @@ func NewCmdRoot() *cobra.Command {
 				/*
 					Oct 10 04:02:02 mail.example.com postfix/smtpd[22941]: DFBEFDBF00C5: client=example.net[127.0.0.1], sasl_method=PLAIN, sasl_username=user@example.com
 				*/
-				if logFormat.ClientHostname != "" {
+				if logFormat.ClientHostname != "" && !strings.HasPrefix(logFormat.Messages, "milter-reject:") {
 					m[logFormat.QueueId] = &PostfixLogParser{
 						Time:           logFormat.Time,
 						Hostname:       logFormat.Hostname,

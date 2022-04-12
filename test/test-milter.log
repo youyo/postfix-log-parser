@@ -1,6 +1,16 @@
-2021-02-06T10:57:57+01:00 mail.server.com postfix/smtpd[59633]: D6DDA23B0F: client=unknown[99.88.77.66]
+021-02-06T10:57:57+01:00 mail.server.com postfix/smtpd[59633]: D6DDA23B0F: client=unknown[99.88.77.66]
 2021-02-06T10:57:57+01:00 mail.server.com postfix/cleanup[59586]: D6DDA23B0F: message-id=<20210206095814.2B34E19A19F6@host.sender.domain>
 2021-02-06T10:57:58+01:00 mail.server.com postfix/cleanup[59586]: D6DDA23B0F: milter-reject: END-OF-MESSAGE from unknown[99.88.77.66]: 4.7.1 Greylisting in action, try again later; from=<user2@example.com> to=<some.dest@destdomain.com> proto=ESMTP helo=<host.sender.domain>
 2021-02-19T14:32:14.936091+01:00 smtp01.example.org postfix/smtpd[58176] E89FA2DEDA: client=srv05.source.com[10.11.12.13]
 2021-02-19T14:32:14.938357+01:00 smtp01.example.org postfix/cleanup[52106] E89FA2DEDA: message-id=<20210219133213.5D10C499CA@srv.domain.org>
 2021-02-19T14:32:14.976132+01:00 smtp01.example.org postfix/cleanup[52106] E89FA2DEDA: milter-hold: END-OF-MESSAGE from srv05.source.com[10.11.12.13]: milter triggers HOLD action; from=<> to=<this_user@this.domain.com> proto=ESMTP helo=<this.domain.com>
+
+
+2021-12-03T06:27:32.797930+01:00 smtp01.example.org postfix/smtpd[50419] connect from 42-64-53-170.subs.proxad.net[42.64.53.170]
+2021-12-03T06:27:33.887389+01:00 smtp01.example.org postfix/smtpd[50419] B42E77AB32: client=42-64-53-170.subs.proxad.net[42.64.53.170], sasl_method=PLAIN, sasl_username=user42@smtp01.example.com
+2021-12-03T06:27:33.923496+01:00 smtp01.example.org postfix/smtpd[50419] B42E77AB32: filter: RCPT from 42-64-53-170.subs.proxad.net[42.64.53.170]: <archive@senderdomain.com>: Recipient address triggers FILTER relay:[smtp01.example.org]; from=<youssefh@senderdomain.com> to=<archive@senderdomain.com> proto=ESMTP helo=<[172.18.0.2]>
+2021-12-03T06:27:33.965888+01:00 smtp01.example.org postfix/cleanup[19657] B42E77AB32: replace: header Received: from [172.18.0.2] (42-64-53-170.subs.proxad.net [42.64.53.170])??(Authenticated sender: user42@smtp01.example.com)??by smtp01.example.org (Postfix) with ESMTPA id D89B from 42-64-53-170.subs.proxad.net[42.64.53.170]; from=<youssefh@senderdomain.com> to=<archive@senderdomain.com> proto=ESMTP helo=<[172.18.0.2]>: Received: from [172.18.0.2] (42-64-53-170.subs.proxad.net [42.64.53.170])??(Authenticated sender: youssef)??by smtp01.example.org (Postfix) with ESMTPA id B42E77AB32;??Wed, 22 Dec 2021 13:59:32 +0100 (CET)
+2021-12-03T06:27:33.965947+01:00 smtp01.example.org postfix/cleanup[19657] B42E77AB32: message-id=<164017759823.25920.10144256874843932242@12f2bb757669>
+2021-12-03T06:27:34.105536+01:00 smtp01.example.org postfix/cleanup[19657] B42E77AB32: milter-reject: END-OF-MESSAGE from 42-64-53-170.subs.proxad.net[42.64.53.170]: 4.7.1 Ratelimit "05" exceeded; from=<youssefh@senderdomain.com> to=<archive@senderdomain.com> proto=ESMTP helo=<[172.18.0.2]>
+2021-12-03T06:27:34.135099+01:00 smtp01.example.org postfix/smtpd[50419] disconnect from 42-64-53-170.subs.proxad.net[42.64.53.170] ehlo=1 auth=1 mail=1 rcpt=2 data=0/1 rset=1 quit=1 commands=7/8
+

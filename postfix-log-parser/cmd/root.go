@@ -262,7 +262,7 @@ func NewCmdRoot() *cobra.Command {
 			p := postfixlog.NewPostfixLog()
 
 			// Get a writer, file or stdout
-			Writer, File, err := NewWriter(outputFile)
+			_, File, err := NewWriter(outputFile)
 			if err != nil {
 				cmd.SetOutput(os.Stderr)
 				cmd.Println(err)
@@ -278,9 +278,8 @@ func NewCmdRoot() *cobra.Command {
 						<-sig
 						mtx.Lock()
 						fmt.Println("SIGUSR1 received, recreating output file")
-						//Writer.Flush()	// Done by File.CLose()
 						File.Close()
-						Writer, File, err = NewWriter(outputFile)
+						_, File, err = NewWriter(outputFile)
 						if err != nil {
 							mtx.Unlock()
 							cmd.SetOutput(os.Stderr)

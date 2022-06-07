@@ -239,6 +239,8 @@ func initConfig() {}
 
 func init() {
 
+	rootCmd.Version = Version
+
 	rootCmd.Flags().BoolVarP(&gFlatten, "gFlatten", "f", false, "Flatten output for using with syslog")
 	rootCmd.Flags().StringVarP(&gOutputFile, "out", "o", "", "Output to file, append if exists")
 	rootCmd.Flags().StringVarP(&gPidFilePath, "pidfile", "p", "", "pid file path")
@@ -255,7 +257,8 @@ func processLogs(cmd *cobra.Command, args []string) {
 	var mtx sync.Mutex
 	var useStdin bool
 
-	fmt.Printf("postfix-log-parser v%s\n", Version)
+	// Nope, breaks stdout output interpretation by jq
+	//fmt.Printf("postfix-log-parser v%s\n", Version)
 	BuildInfo.WithLabelValues(Version, runtime.Version()).Set(1)
 	StartTime.Set(float64(time.Now().Unix()))
 

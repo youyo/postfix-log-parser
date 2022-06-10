@@ -1,27 +1,28 @@
 package cmd
 
 import (
-	"bufio"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net"
-	"net/http"
 	"os"
-	"os/signal"
+	"fmt"
+	"net"
+	"log"
+	"sync"
+	"time"
+	"bufio"
+	"errors"
+	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
-	"time"
+	"os/signal"
+	"encoding/json"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"github.com/tabalt/pidfile"
 	postfixlog "github.com/yo000/postfix-log-parser"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func init() {}
@@ -76,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.2.7"
+	Version = "1.2.9"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -339,19 +340,20 @@ func processLogs(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	var connClt net.Conn
 	for {
 		// If input is made via TCP Conn, we need to read from a connected net.Conn
 		if useStdin == false {
 			if scanner == nil {
 				// We support _only one_ concurent connection to the service
-				connClt, err := listener.Accept()
+				connClt, err = listener.Accept()
 				if err != nil {
 					log.Printf("Error accepting: %v", err)
 					// Loop
 					continue
 				}
-				// Read will fail if no data after "duration"
-				connClt.SetReadDeadline(time.Now().Add(time.Duration(3600) * time.Second))
+				// Read will fail after "duration"
+				connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
 				scanner = bufio.NewScanner(connClt)
 			}
 		}
@@ -360,6 +362,12 @@ func processLogs(cmd *cobra.Command, args []string) {
 			// After Scan returns false, the Err method will return any error that occurred during scanning, except that if it was io.EOF, Err will return nil
 			if err := scanner.Err(); err != nil {
 				log.Printf("Error reading data: %v\n", err.Error())
+				if useStdin == false && errors.Is(err, os.ErrDeadlineExceeded) {
+					log.Printf("I/O timeout on socket, closing connection.\n")
+					// Should we? Actually we can't as connClt is not known here
+					// connClt.Close()
+					scanner = nil
+				}
 				continue
 			}
 			if useStdin == false {
@@ -371,6 +379,9 @@ func processLogs(cmd *cobra.Command, args []string) {
 				return
 			}
 		}
+		// Extend timeout after successful read (so we got an idle timeout)
+		connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
+
 		LineReadCnt.Inc()
 
 		// parse log

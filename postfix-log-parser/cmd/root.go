@@ -77,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.2.9"
+	Version = "1.2.10"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -380,7 +380,9 @@ func processLogs(cmd *cobra.Command, args []string) {
 			}
 		}
 		// Extend timeout after successful read (so we got an idle timeout)
-		connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
+		if useStdin == false {
+			connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
+		}
 
 		LineReadCnt.Inc()
 

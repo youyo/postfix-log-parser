@@ -257,9 +257,11 @@ func processLogs(cmd *cobra.Command, args []string) {
 	var listener net.Listener
 	var mtx sync.Mutex
 	var useStdin bool
-
-	// Nope, breaks stdout output interpretation by jq
-	//fmt.Printf("postfix-log-parser v%s\n", Version)
+	
+	// create queue
+	mQueue := make(map[string]*PostfixLogParser)
+	
+	
 	BuildInfo.WithLabelValues(Version, runtime.Version()).Set(1)
 	StartTime.Set(float64(time.Now().Unix()))
 
@@ -289,10 +291,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			defer pid.Clear()
 		}
 	}
-
-	// create queue
-	m := make(map[string]*PostfixLogParser)
-
+	
 	// initialize
 	p := postfixlog.NewPostfixLog()
 
@@ -327,7 +326,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 	}
 
 	// Cleaner thread
-	go periodicallyCleanMQueue(m)
+	go periodicallyCleanMQueue(mQueue)
 
 	// Initialize Stdin input
 	if true == strings.EqualFold(gSyslogListenAddress, "do-not-listen") {
@@ -403,7 +402,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			Oct 10 04:02:02 mail.example.com postfix/smtpd[22941]: DFBEFDBF00C5: client=example.net[127.0.0.1], sasl_method=PLAIN, sasl_username=user@example.com
 		*/
 		if logFormat.ClientHostname != "" && !strings.HasPrefix(logFormat.Messages, "milter-reject:") {
-			m[logFormat.QueueId] = &PostfixLogParser{
+			mQueue[logFormat.QueueId] = &PostfixLogParser{
 				Time:           logFormat.Time,
 				Hostname:       logFormat.Hostname,
 				Process:        logFormat.Process,
@@ -419,7 +418,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			Oct 10 04:02:02 mail.example.com postfix/cleanup[22923]: DFBEFDBF00C5: message-id=<20181009190202.81363306015D@example.com>
 		*/
 		if logFormat.MessageId != "" {
-			if plp, ok := m[logFormat.QueueId]; ok {
+			if plp, ok := mQueue[logFormat.QueueId]; ok {
 				plp.MessageId = logFormat.MessageId
 			}
 		}
@@ -428,7 +427,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			Oct 10 04:02:03 mail.example.com postfix/qmgr[18719]: DFBEFDBF00C5: from=<root@example.com>, size=3578, nrcpt=1 (queue active)
 		*/
 		if logFormat.From != "" {
-			if plp, ok := m[logFormat.QueueId]; ok {
+			if plp, ok := mQueue[logFormat.QueueId]; ok {
 				plp.From = logFormat.From
 				plp.Size = logFormat.Size
 				plp.NRcpt = logFormat.NRcpt
@@ -441,7 +440,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			Oct 10 04:02:08 mail.example.com postfix/smtp[22928]: DFBEFDBF00C5: to=<test@example-to.com>, relay=mail.example-to.com[192.168.0.10]:25, delay=5.3, delays=0.26/0/0.31/4.7, dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as C598F1B0002D)
 		*/
 		if logFormat.To != "" {
-			if plp, ok := m[logFormat.QueueId]; ok {
+			if plp, ok := mQueue[logFormat.QueueId]; ok {
 				message := Message{
 					Time:     logFormat.Time,
 					To:       logFormat.To,
@@ -500,7 +499,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			2021-02-05T17:25:03+01:00 mail.example.com postfix/bounce[39258]: 006B056E6: sender non-delivery notification: 642E456E9
 		*/
 		if logFormat.BounceId != "" {
-			if plp, ok := m[logFormat.QueueId]; ok {
+			if plp, ok := mQueue[logFormat.QueueId]; ok {
 				// Get the matching Message by Status=bounced
 				for i, msg := range plp.Messages {
 					// Need to manage more than one bounce for the same queue_id. This is flawy as we just rely on order to match
@@ -527,7 +526,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 		*/
 		// "removed" message is end of logs. then flush.
 		if logFormat.Messages == "removed" || strings.HasPrefix(logFormat.Status, "milter-") {
-			if plp, ok := m[logFormat.QueueId]; ok {
+			if plp, ok := mQueue[logFormat.QueueId]; ok {
 				for _, plpf := range PlpToFlat(plp) {
 					switch plpf.Status {
 					case "sent":

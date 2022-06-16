@@ -3,24 +3,24 @@ package cmd
 import (
 	"os"
 	"fmt"
-	"net"
 	"log"
+	"net"
 	"sync"
 	"time"
 	"bufio"
 	"errors"
-	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+	"net/http"
 	"os/signal"
 	"encoding/json"
 
 	"github.com/spf13/cobra"
 	"github.com/tabalt/pidfile"
-	postfixlog "github.com/yo000/postfix-log-parser"
 	"github.com/prometheus/client_golang/prometheus"
+	postfixlog "github.com/yo000/postfix-log-parser"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -123,6 +123,10 @@ var (
 		Name: "postfixlogparser_msg_hold_count",
 		Help: "Number of mails hold",
 	}, []string{"host"})
+	ConnectedClientCnt = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "postfixlogparser_client_count",
+		Help: "Number of connected clients",
+	})
 
 	rootCmd = &cobra.Command{
 		Use:   "postfix-log-parser",
@@ -212,10 +216,11 @@ func writeOut(msg string, filename string) error {
 }
 
 // Every 24H, remove sent, milter-rejected and deferred that entered queue more than 5 days ago
-func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser) {
+func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx sync.Mutex) {
 	var ok int
 
 	for range time.Tick(time.Hour * 24) {
+		// Do we need read lock?
 		for _, inmail := range mqueue {
 			ok = 0
 			// Check all mails were sent (multiple destinations mails)
@@ -230,7 +235,9 @@ func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser) {
 				}
 			}
 			if ok == len(inmail.Messages) {
+				mqMtx.Lock()
 				delete(mqueue, inmail.MessageId)
+				mqMtx.Unlock()
 			}
 		}
 	}
@@ -252,12 +259,12 @@ func init() {
 	cobra.OnInitialize(initConfig)
 }
 
-/* 
- * This is the function doing the work. 
- * Each input is stored in a map, 
+/*
+ * This is the function doing the work.
+ * Each input is stored in a map,
  * then written to output when we recognize it as the last line
  */
-func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.Mutex, p *postfixlog.PostfixLog) error {
+func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx sync.Mutex, outfMtx sync.Mutex, p *postfixlog.PostfixLog) error {
 	logFormat, err := p.Parse(input)
 	if err != nil {
 		// Incorrect line, just skip it
@@ -272,6 +279,7 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 		Oct 10 04:02:02 mail.example.com postfix/smtpd[22941]: DFBEFDBF00C5: client=example.net[127.0.0.1], sasl_method=PLAIN, sasl_username=user@example.com
 	*/
 	if logFormat.ClientHostname != "" && !strings.HasPrefix(logFormat.Messages, "milter-reject:") {
+		mqMtx.Lock()
 		mq[logFormat.QueueId] = &PostfixLogParser{
 			Time:           logFormat.Time,
 			Hostname:       logFormat.Hostname,
@@ -282,6 +290,7 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 			SaslMethod:     logFormat.SaslMethod,
 			SaslUsername:   logFormat.SaslUsername,
 		}
+		mqMtx.Unlock()
 	}
 
 	/*
@@ -289,7 +298,9 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 	*/
 	if logFormat.MessageId != "" {
 		if plp, ok := mq[logFormat.QueueId]; ok {
+			mqMtx.Lock()
 			plp.MessageId = logFormat.MessageId
+			mqMtx.Unlock()
 		}
 	}
 
@@ -298,9 +309,11 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 	*/
 	if logFormat.From != "" {
 		if plp, ok := mq[logFormat.QueueId]; ok {
+			mqMtx.Lock()
 			plp.From = logFormat.From
 			plp.Size = logFormat.Size
 			plp.NRcpt = logFormat.NRcpt
+			mqMtx.Unlock()
 		}
 		nrcpt, _ := strconv.ParseFloat(logFormat.NRcpt, 64)
 		MsgInCnt.WithLabelValues(logFormat.Hostname).Add(nrcpt)
@@ -311,6 +324,7 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 	*/
 	if logFormat.To != "" {
 		if plp, ok := mq[logFormat.QueueId]; ok {
+			mqMtx.Lock()
 			message := Message{
 				Time:     logFormat.Time,
 				To:       logFormat.To,
@@ -318,10 +332,11 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 				Message:  logFormat.Messages,
 				BounceId: "",
 			}
+			mqMtx.Unlock()
 
 			/* When a message is deferred, it won't be written out until it is either sent, expired, or generates a non delivery notification.
-				We want to know instantly when a message is deferred, so we handle this case by emiting output for this message, and not appending this occurence
-				to the list of Messages
+			We want to know instantly when a message is deferred, so we handle this case by emiting output for this message, and not appending this occurence
+			to the list of Messages
 			*/
 			if logFormat.Status == "deferred" {
 				MsgDeferredCnt.WithLabelValues(plp.Hostname).Inc()
@@ -350,9 +365,9 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 				if err != nil {
 					log.Fatal(err)
 				}
-				mtx.Lock()
+				outfMtx.Lock()
 				err = writeOut(string(jsonBytes), gOutputFile)
-				mtx.Unlock()
+				outfMtx.Unlock()
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -371,6 +386,7 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 	if logFormat.BounceId != "" {
 		if plp, ok := mq[logFormat.QueueId]; ok {
 			// Get the matching Message by Status=bounced
+			mqMtx.Lock()
 			for i, msg := range plp.Messages {
 				// Need to manage more than one bounce for the same queue_id. This is flawy as we just rely on order to match
 				if msg.Status == "bounced" && len(msg.BounceId) == 0 {
@@ -387,6 +403,7 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 					break
 				}
 			}
+			mqMtx.Unlock()
 		}
 	}
 	/*
@@ -414,9 +431,9 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 					if err != nil {
 						log.Fatal(err)
 					}
-					mtx.Lock()
+					outfMtx.Lock()
 					err = writeOut(string(jsonBytes), gOutputFile)
-					mtx.Unlock()
+					outfMtx.Unlock()
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -428,9 +445,9 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 				if err != nil {
 					log.Fatal(err)
 				}
-				mtx.Lock()
+				outfMtx.Lock()
 				err = writeOut(string(jsonBytes), gOutputFile)
-				mtx.Unlock()
+				outfMtx.Unlock()
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -443,13 +460,15 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mtx sync.
 func processLogs(cmd *cobra.Command, args []string) {
 	var scanner *bufio.Scanner
 	var listener net.Listener
-	var mtx sync.Mutex
+	// Output file mutex
+	var outfMtx sync.Mutex
+	// mQueue mutex
+	var mqMtx sync.Mutex
 	var useStdin bool
-	
-	// create queue
+
+	// create map of messages
 	mQueue := make(map[string]*PostfixLogParser)
-	
-	
+
 	BuildInfo.WithLabelValues(Version, runtime.Version()).Set(1)
 	StartTime.Set(float64(time.Now().Unix()))
 
@@ -479,7 +498,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 			defer pid.Clear()
 		}
 	}
-	
+
 	// initialize
 	p := postfixlog.NewPostfixLog()
 
@@ -498,23 +517,23 @@ func processLogs(cmd *cobra.Command, args []string) {
 		go func() {
 			for {
 				<-sig
-				mtx.Lock()
+				outfMtx.Lock()
 				fmt.Println("SIGUSR1 received, recreating output file")
 				File.Close()
 				_, File, err = NewWriter(gOutputFile)
 				if err != nil {
-					mtx.Unlock()
+					outfMtx.Unlock()
 					cmd.SetOutput(os.Stderr)
 					cmd.Println(err)
 					os.Exit(1)
 				}
-				mtx.Unlock()
+				outfMtx.Unlock()
 			}
 		}()
 	}
 
 	// Cleaner thread
-	go periodicallyCleanMQueue(mQueue)
+	go periodicallyCleanMQueue(mQueue, mqMtx)
 
 	// Initialize Stdin input
 	if true == strings.EqualFold(gSyslogListenAddress, "do-not-listen") {
@@ -542,6 +561,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 				// Read will fail after "duration"
 				connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
 				scanner = bufio.NewScanner(connClt)
+				ConnectedClientCnt.Inc()
 			}
 		}
 
@@ -554,12 +574,14 @@ func processLogs(cmd *cobra.Command, args []string) {
 					// Should we? Actually we can't as connClt is not known here
 					// connClt.Close()
 					scanner = nil
+					ConnectedClientCnt.Dec()
 				}
 				continue
 			}
 			if useStdin == false {
 				// close connection so we can Accept() again, then loop
 				scanner = nil
+				ConnectedClientCnt.Dec()
 				continue
 			} else {
 				// stdin is dead, abort mission!
@@ -572,8 +594,8 @@ func processLogs(cmd *cobra.Command, args []string) {
 		}
 
 		LineReadCnt.Inc()
-		
-		err = parseStoreAndWrite(scanner.Bytes(), mQueue, mtx, p)
+
+		err = parseStoreAndWrite(scanner.Bytes(), mQueue, mqMtx, outfMtx, p)
 		if err != nil {
 			cmd.SetOutput(os.Stderr)
 			cmd.Println(err)
@@ -583,8 +605,8 @@ func processLogs(cmd *cobra.Command, args []string) {
 		}
 	}
 	if File != nil {
-		mtx.Lock()
+		outfMtx.Lock()
 		File.Close()
-		mtx.Unlock()
+		outfMtx.Unlock()
 	}
 }

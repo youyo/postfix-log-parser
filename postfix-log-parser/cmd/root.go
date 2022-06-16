@@ -123,7 +123,7 @@ var (
 		Name: "postfixlogparser_msg_hold_count",
 		Help: "Number of mails hold",
 	}, []string{"host"})
-	ConnectedClientCnt = promauto.NewCounter(prometheus.CounterOpts{
+	ConnectedClientCnt = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "postfixlogparser_client_count",
 		Help: "Number of connected clients",
 	})

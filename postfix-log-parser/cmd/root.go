@@ -77,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.2.10"
+	Version = "1.3a"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",

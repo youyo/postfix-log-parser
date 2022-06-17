@@ -77,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.3a"
+	Version = "1.2.10"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -264,7 +264,8 @@ func init() {
  * Each input is stored in a map,
  * then written to output when we recognize it as the last line
  */
-func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sync.Mutex, outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
+func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sync.Mutex, 
+	outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
 	logFormat, err := p.Parse(input)
 	if err != nil {
 		// Incorrect line, just skip it
@@ -459,15 +460,13 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sy
 }
 
 func scanAndProcess(scanner *bufio.Scanner, isStdin bool, conn net.Conn, mQueue map[string]*PostfixLogParser, 
-					mqMtx *sync.Mutex, outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
-	
-	ConnectedClientCnt.Inc()
+	mqMtx *sync.Mutex, outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
 	for {
 		// If input is made via TCP Conn, we need to read from a connected net.Conn
 		if scanner == nil || (isStdin == false && conn == nil) {
-				return errors.New("Invalid input")
+			return errors.New("Invalid input")
 		}
-		
+
 		if false == scanner.Scan() {
 			// After Scan returns false, the Err method will return any error that occurred during scanning, except that if it was io.EOF, Err will return nil
 			if err := scanner.Err(); err != nil {
@@ -477,18 +476,17 @@ func scanAndProcess(scanner *bufio.Scanner, isStdin bool, conn net.Conn, mQueue 
 				log.Printf("No more data, closing connection.\n")
 				// Should we?
 				conn.Close()
-				ConnectedClientCnt.Dec()
 			}
 			// input is dead, abort mission!
 			return errors.New("Read error")
 		}
 		// Extend timeout after successful read (so we got an idle timeout)
-		if isStdin == false && conn != nil{
+		if isStdin == false && conn != nil {
 			conn.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
 		}
 
 		LineReadCnt.Inc()
-		
+
 		read := scanner.Bytes()
 		err := parseStoreAndWrite(read, mQueue, mqMtx, outfMtx, p)
 		if err != nil {
@@ -501,7 +499,6 @@ func scanAndProcess(scanner *bufio.Scanner, isStdin bool, conn net.Conn, mQueue 
 	}
 	return nil
 }
-
 
 func processLogs(cmd *cobra.Command, args []string) {
 	//var scanner *bufio.Scanner
@@ -580,13 +577,9 @@ func processLogs(cmd *cobra.Command, args []string) {
 
 	// Cleaner thread
 	go periodicallyCleanMQueue(mQueue, mqMtx)
-	
+
 	// Initialize Stdin input...
 	if true == strings.EqualFold(gSyslogListenAddress, "do-not-listen") {
-		
-		// DEUBG
-		fmt.Printf("Reading stdin\n")
-		
 		useStdin = true
 		scanner := bufio.NewScanner(os.Stdin)
 		scanAndProcess(scanner, useStdin, nil, mQueue, &mqMtx, &outfMtx, p)
@@ -604,10 +597,12 @@ func processLogs(cmd *cobra.Command, args []string) {
 				continue
 			}
 			scanner := bufio.NewScanner(connClt)
+			ConnectedClientCnt.Inc()
 			go scanAndProcess(scanner, useStdin, connClt, mQueue, &mqMtx, &outfMtx, p)
+			ConnectedClientCnt.Dec()
 		}
 	}
-	
+
 	if File != nil {
 		outfMtx.Lock()
 		File.Close()

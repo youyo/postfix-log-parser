@@ -264,7 +264,7 @@ func init() {
  * Each input is stored in a map,
  * then written to output when we recognize it as the last line
  */
-func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx sync.Mutex, outfMtx sync.Mutex, p *postfixlog.PostfixLog) error {
+func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sync.Mutex, outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
 	logFormat, err := p.Parse(input)
 	if err != nil {
 		// Incorrect line, just skip it
@@ -297,24 +297,24 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 		Oct 10 04:02:02 mail.example.com postfix/cleanup[22923]: DFBEFDBF00C5: message-id=<20181009190202.81363306015D@example.com>
 	*/
 	if logFormat.MessageId != "" {
+		mqMtx.Lock()
 		if plp, ok := mq[logFormat.QueueId]; ok {
-			mqMtx.Lock()
 			plp.MessageId = logFormat.MessageId
-			mqMtx.Unlock()
 		}
+		mqMtx.Unlock()
 	}
 
 	/*
 		Oct 10 04:02:03 mail.example.com postfix/qmgr[18719]: DFBEFDBF00C5: from=<root@example.com>, size=3578, nrcpt=1 (queue active)
 	*/
 	if logFormat.From != "" {
+		mqMtx.Lock()
 		if plp, ok := mq[logFormat.QueueId]; ok {
-			mqMtx.Lock()
 			plp.From = logFormat.From
 			plp.Size = logFormat.Size
 			plp.NRcpt = logFormat.NRcpt
-			mqMtx.Unlock()
 		}
+		mqMtx.Unlock()
 		nrcpt, _ := strconv.ParseFloat(logFormat.NRcpt, 64)
 		MsgInCnt.WithLabelValues(logFormat.Hostname).Add(nrcpt)
 	}
@@ -323,8 +323,8 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 		Oct 10 04:02:08 mail.example.com postfix/smtp[22928]: DFBEFDBF00C5: to=<test@example-to.com>, relay=mail.example-to.com[192.168.0.10]:25, delay=5.3, delays=0.26/0/0.31/4.7, dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as C598F1B0002D)
 	*/
 	if logFormat.To != "" {
+		mqMtx.Lock()
 		if plp, ok := mq[logFormat.QueueId]; ok {
-			mqMtx.Lock()
 			message := Message{
 				Time:     logFormat.Time,
 				To:       logFormat.To,
@@ -332,8 +332,6 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 				Message:  logFormat.Messages,
 				BounceId: "",
 			}
-			mqMtx.Unlock()
-
 			/* When a message is deferred, it won't be written out until it is either sent, expired, or generates a non delivery notification.
 			We want to know instantly when a message is deferred, so we handle this case by emiting output for this message, and not appending this occurence
 			to the list of Messages
@@ -378,15 +376,16 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 				plp.Messages = append(plp.Messages, message)
 			}
 		}
+		mqMtx.Unlock()
 	}
 
 	/*
 		2021-02-05T17:25:03+01:00 mail.example.com postfix/bounce[39258]: 006B056E6: sender non-delivery notification: 642E456E9
 	*/
 	if logFormat.BounceId != "" {
+		mqMtx.Lock()
 		if plp, ok := mq[logFormat.QueueId]; ok {
 			// Get the matching Message by Status=bounced
-			mqMtx.Lock()
 			for i, msg := range plp.Messages {
 				// Need to manage more than one bounce for the same queue_id. This is flawy as we just rely on order to match
 				if msg.Status == "bounced" && len(msg.BounceId) == 0 {
@@ -403,8 +402,8 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 					break
 				}
 			}
-			mqMtx.Unlock()
 		}
+		mqMtx.Unlock()
 	}
 	/*
 		Oct 10 04:02:08 mail.example.com postfix/qmgr[18719]: DFBEFDBF00C5: removed
@@ -413,6 +412,7 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 	*/
 	// "removed" message is end of logs. then flush.
 	if logFormat.Messages == "removed" || strings.HasPrefix(logFormat.Status, "milter-") {
+		mqMtx.Lock()
 		if plp, ok := mq[logFormat.QueueId]; ok {
 			for _, plpf := range PlpToFlat(plp) {
 				switch plpf.Status {
@@ -453,12 +453,58 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx syn
 				}
 			}
 		}
+		mqMtx.Unlock()
 	}
 	return nil
 }
 
+func scanAndProcess(scanner *bufio.Scanner, isStdin bool, conn net.Conn, mQueue map[string]*PostfixLogParser, 
+					mqMtx *sync.Mutex, outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
+	
+	ConnectedClientCnt.Inc()
+	for {
+		// If input is made via TCP Conn, we need to read from a connected net.Conn
+		if scanner == nil || (isStdin == false && conn == nil) {
+				return errors.New("Invalid input")
+		}
+		
+		if false == scanner.Scan() {
+			// After Scan returns false, the Err method will return any error that occurred during scanning, except that if it was io.EOF, Err will return nil
+			if err := scanner.Err(); err != nil {
+				log.Printf("Error reading data: %v\n", err.Error())
+			}
+			if isStdin == false {
+				log.Printf("No more data, closing connection.\n")
+				// Should we?
+				conn.Close()
+				ConnectedClientCnt.Dec()
+			}
+			// input is dead, abort mission!
+			return errors.New("Read error")
+		}
+		// Extend timeout after successful read (so we got an idle timeout)
+		if isStdin == false && conn != nil{
+			conn.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
+		}
+
+		LineReadCnt.Inc()
+		
+		read := scanner.Bytes()
+		err := parseStoreAndWrite(read, mQueue, mqMtx, outfMtx, p)
+		if err != nil {
+			if err.Error() != "Error: Line do not match regex" {
+				return err
+			} else {
+				log.Printf("input do not match regex: %s\n", string(read))
+			}
+		}
+	}
+	return nil
+}
+
+
 func processLogs(cmd *cobra.Command, args []string) {
-	var scanner *bufio.Scanner
+	//var scanner *bufio.Scanner
 	var listener net.Listener
 	// Output file mutex
 	var outfMtx sync.Mutex
@@ -534,76 +580,34 @@ func processLogs(cmd *cobra.Command, args []string) {
 
 	// Cleaner thread
 	go periodicallyCleanMQueue(mQueue, mqMtx)
-
-	// Initialize Stdin input
+	
+	// Initialize Stdin input...
 	if true == strings.EqualFold(gSyslogListenAddress, "do-not-listen") {
+		
+		// DEUBG
+		fmt.Printf("Reading stdin\n")
+		
 		useStdin = true
-		scanner = bufio.NewScanner(os.Stdin)
+		scanner := bufio.NewScanner(os.Stdin)
+		scanAndProcess(scanner, useStdin, nil, mQueue, &mqMtx, &outfMtx, p)
+	// ...or manages incoming connections
 	} else {
 		listener, err = net.Listen("tcp", gSyslogListenAddress)
 		if err != nil {
 			log.Fatal(fmt.Sprintf("Error listening on %s: %v\n", gSyslogListenAddress, err))
 		}
-	}
-
-	var connClt net.Conn
-	for {
-		// If input is made via TCP Conn, we need to read from a connected net.Conn
-		if useStdin == false {
-			if scanner == nil {
-				// We support _only one_ concurent connection to the service
-				connClt, err = listener.Accept()
-				if err != nil {
-					log.Printf("Error accepting: %v", err)
-					// Loop
-					continue
-				}
-				// Read will fail after "duration"
-				connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
-				scanner = bufio.NewScanner(connClt)
-				ConnectedClientCnt.Inc()
-			}
-		}
-
-		if false == scanner.Scan() {
-			// After Scan returns false, the Err method will return any error that occurred during scanning, except that if it was io.EOF, Err will return nil
-			if err := scanner.Err(); err != nil {
-				log.Printf("Error reading data: %v\n", err.Error())
-				if useStdin == false && errors.Is(err, os.ErrDeadlineExceeded) {
-					log.Printf("I/O timeout on socket, closing connection.\n")
-					// Should we? Actually we can't as connClt is not known here
-					// connClt.Close()
-					scanner = nil
-					ConnectedClientCnt.Dec()
-				}
+		for {
+			connClt, err := listener.Accept()
+			if err != nil {
+				log.Printf("Error accepting: %v", err)
+				// Loop
 				continue
 			}
-			if useStdin == false {
-				// close connection so we can Accept() again, then loop
-				scanner = nil
-				ConnectedClientCnt.Dec()
-				continue
-			} else {
-				// stdin is dead, abort mission!
-				return
-			}
-		}
-		// Extend timeout after successful read (so we got an idle timeout)
-		if useStdin == false {
-			connClt.SetReadDeadline(time.Now().Add(time.Duration(600) * time.Second))
-		}
-
-		LineReadCnt.Inc()
-
-		err = parseStoreAndWrite(scanner.Bytes(), mQueue, mqMtx, outfMtx, p)
-		if err != nil {
-			cmd.SetOutput(os.Stderr)
-			cmd.Println(err)
-			if err.Error() != "Error: Line do not match regex" {
-				os.Exit(1)
-			}
+			scanner := bufio.NewScanner(connClt)
+			go scanAndProcess(scanner, useStdin, connClt, mQueue, &mqMtx, &outfMtx, p)
 		}
 	}
+	
 	if File != nil {
 		outfMtx.Lock()
 		File.Close()

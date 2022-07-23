@@ -1,28 +1,28 @@
 package cmd
 
 import (
-	"os"
+	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
-	"sync"
-	"time"
-	"bufio"
-	"errors"
+	"net/http"
+	"os"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
-	"net/http"
-	"os/signal"
-	"encoding/json"
+	"time"
 
-	"github.com/spf13/cobra"
-	"github.com/tabalt/pidfile"
 	"github.com/prometheus/client_golang/prometheus"
-	postfixlog "github.com/yo000/postfix-log-parser"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/cobra"
+	"github.com/tabalt/pidfile"
+	postfixlog "github.com/yo000/postfix-log-parser"
 )
 
 func init() {}
@@ -122,6 +122,10 @@ var (
 	MsgHoldCnt = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "postfixlogparser_msg_hold_count",
 		Help: "Number of mails hold",
+	}, []string{"host"})
+	MsgAuthFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "postfixlogparser_auth_failed_count",
+		Help: "Number of failed authentications",
 	}, []string{"host"})
 	ConnectedClientCnt = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "postfixlogparser_client_count",
@@ -264,7 +268,7 @@ func init() {
  * Each input is stored in a map,
  * then written to output when we recognize it as the last line
  */
-func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sync.Mutex, 
+func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sync.Mutex,
 	outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
 	logFormat, err := p.Parse(input)
 	if err != nil {
@@ -456,10 +460,50 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sy
 		}
 		mqMtx.Unlock()
 	}
+
+	/*
+		2022-06-29T10:55:18.498553+02:00 srv-smtp-01.domain.com postfix/smtpd[75994] warning: unknown[10.11.12.13]: SASL LOGIN authentication failed: authentication failure
+	*/
+	// An auth failed message is not queued, we just write and forget
+	if strings.EqualFold(logFormat.Status, "auth-failed") {
+		MsgAuthFailed.WithLabelValues(logFormat.Hostname).Inc()
+		message := Message{
+			Time:    logFormat.Time,
+			Status:  logFormat.Status,
+			Message: logFormat.Messages,
+		}
+
+		tmpplp := PostfixLogParser{
+			Time:           logFormat.Time,
+			Hostname:       logFormat.Hostname,
+			Process:        logFormat.Process,
+			ClientHostname: logFormat.ClientHostname,
+			ClinetIp:       logFormat.ClinetIp,
+			SaslMethod:     logFormat.SaslMethod,
+		}
+		tmpplp.Messages = append(tmpplp.Messages, message)
+
+		var jsonBytes []byte
+		if gFlatten {
+			jsonBytes, err = json.Marshal(PlpToFlat(&tmpplp)[0])
+		} else {
+			jsonBytes, err = json.Marshal(tmpplp)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		outfMtx.Lock()
+		err = writeOut(string(jsonBytes), gOutputFile)
+		outfMtx.Unlock()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	return nil
 }
 
-func scanAndProcess(scanner *bufio.Scanner, isStdin bool, conn net.Conn, mQueue map[string]*PostfixLogParser, 
+func scanAndProcess(scanner *bufio.Scanner, isStdin bool, conn net.Conn, mQueue map[string]*PostfixLogParser,
 	mqMtx *sync.Mutex, outfMtx *sync.Mutex, p *postfixlog.PostfixLog) error {
 	for {
 		// If input is made via TCP Conn, we need to read from a connected net.Conn
@@ -583,7 +627,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 		useStdin = true
 		scanner := bufio.NewScanner(os.Stdin)
 		scanAndProcess(scanner, useStdin, nil, mQueue, &mqMtx, &outfMtx, p)
-	// ...or manages incoming connections
+		// ...or manages incoming connections
 	} else {
 		listener, err = net.Listen("tcp", gSyslogListenAddress)
 		if err != nil {

@@ -77,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.3a"
+	Version = "1.4"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -216,7 +216,7 @@ func writeOut(msg string, filename string) error {
 }
 
 // Every 24H, remove sent, milter-rejected and deferred that entered queue more than 5 days ago
-func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx sync.Mutex) {
+func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex) {
 	var ok int
 
 	for range time.Tick(time.Hour * 24) {
@@ -576,7 +576,7 @@ func processLogs(cmd *cobra.Command, args []string) {
 	}
 
 	// Cleaner thread
-	go periodicallyCleanMQueue(mQueue, mqMtx)
+	go periodicallyCleanMQueue(mQueue, &mqMtx)
 
 	// Initialize Stdin input...
 	if true == strings.EqualFold(gSyslogListenAddress, "do-not-listen") {

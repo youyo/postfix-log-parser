@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-Owner := youyo
+Owner := yo000
 Name := postfix-log-parser
 Repository := "github.com/$(Owner)/$(Name)"
 GithubToken := ${GITHUB_TOKEN}

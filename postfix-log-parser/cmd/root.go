@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"

@@ -77,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.4.2"
+	Version = "1.4.3"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -219,33 +219,45 @@ func writeOut(msg string, filename string) error {
 	return nil
 }
 
-// Every 24H, remove sent, milter-rejected and deferred that entered queue more than 5 days ago
-func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex) {
+
+// Remove sent, milter-rejected and deferred that entered queue more than "duration" ago
+func cleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex, age time.Duration) {
 	var ok int
 
-	for range time.Tick(time.Hour * 24) {
-		// Do we need read lock?
-		for _, inmail := range mqueue {
-			ok = 0
-			// Check all mails were sent (multiple destinations mails)
-			//  or rejected
-			for _, outmail := range inmail.Messages {
-				if outmail.Status == "sent" || outmail.Status == "milter-reject" {
+	log.Printf("Start cleaning queue task: %d items in queue", len(mqueue))
+
+	// Do we need read lock?
+	for qid, inmail := range mqueue {
+		ok = 0
+		// Check all mails were sent (multiple destinations mails)
+		for _, outmail := range inmail.Messages {
+			// Sent and Rejected mails won't have any other event, we can rm
+			if outmail.Status == "sent" || outmail.Status == "milter-reject" {
+				ok += 1
+			} else if outmail.Status == "deferred" {
+				if inmail.Time.Add(age).Before(time.Now()) {
 					ok += 1
-				} else if outmail.Status == "deferred" {
-					if inmail.Time.Add(time.Hour * 5 * 24).Before(time.Now()) {
-						ok += 1
-					}
 				}
 			}
-			if ok == len(inmail.Messages) {
-				mqMtx.Lock()
-				delete(mqueue, inmail.MessageId)
-				mqMtx.Unlock()
-			}
+		}
+
+		if ok == len(inmail.Messages) {
+			mqMtx.Lock()
+			delete(mqueue, qid)
+			mqMtx.Unlock()
 		}
 	}
+	log.Printf("Finished cleaning queue task: %d items in queue", len(mqueue))
 }
+
+
+// Every 24H, remove sent, milter-rejected and deferred that entered queue more than 5 days ago
+func periodicallyCleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex) {
+	for range time.Tick(time.Hour * 24) {
+		cleanMQueue(mqueue, mqMtx, 5 * 24 * time.Hour)
+	}
+}
+
 
 func initConfig() {}
 
@@ -621,6 +633,18 @@ func processLogs(cmd *cobra.Command, args []string) {
 
 	// Cleaner thread
 	go periodicallyCleanMQueue(mQueue, &mqMtx)
+
+
+	// On demand Mqueue cleaning... For debug, dont try this at home, kids!
+/*	sig2 := make(chan os.Signal)
+	signal.Notify(sig2, syscall.SIGUSR2)
+	go func() {
+		for {
+			<-sig2
+			cleanMQueue(mQueue, &mqMtx, 1 * time.Hour)
+		}
+	}()
+*/	
 
 	// Initialize Stdin input...
 	if true == strings.EqualFold(gSyslogListenAddress, "do-not-listen") {

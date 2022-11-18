@@ -226,7 +226,8 @@ func cleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex, age tim
 
 	log.Printf("Start cleaning queue task: %d items in queue", len(mqueue))
 
-	// Do we need read lock?
+	// We need read lock: fatal error: concurrent map iteration and map write
+	mqMtx.Lock()
 	for qid, inmail := range mqueue {
 		ok = 0
 		// Check all mails were sent (multiple destinations mails)
@@ -242,11 +243,11 @@ func cleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex, age tim
 		}
 
 		if ok == len(inmail.Messages) {
-			mqMtx.Lock()
+			// We already in rw lock
 			delete(mqueue, qid)
-			mqMtx.Unlock()
 		}
 	}
+	mqMtx.Unlock()
 	log.Printf("Finished cleaning queue task: %d items in queue", len(mqueue))
 }
 

@@ -77,7 +77,7 @@ var (
 	File   os.File
 	Writer *bufio.Writer
 
-	Version = "1.4.4"
+	Version = "1.4.5"
 
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "postfixlogparser_build_info",
@@ -233,7 +233,7 @@ func cleanMQueue(mqueue map[string]*PostfixLogParser, mqMtx *sync.Mutex, age tim
 		// Check all mails were sent (multiple destinations mails)
 		for _, outmail := range inmail.Messages {
 			// Sent and Rejected mails won't have any other event, we can rm
-			if outmail.Status == "sent" || outmail.Status == "milter-reject" {
+			if outmail.Status == "sent" || outmail.Status == "milter-reject" || outmail.Status == "postfix-reject" {
 				ok += 1
 			} else if outmail.Status == "deferred" {
 				if inmail.Time.Add(age).Before(time.Now()) {
@@ -427,16 +427,18 @@ func parseStoreAndWrite(input []byte, mq map[string]*PostfixLogParser, mqMtx *sy
 		Oct 10 04:02:08 mail.example.com postfix/qmgr[18719]: DFBEFDBF00C5: removed
 			or
 		2021-02-05T14:17:51+01:00 smtp.server.com postfix/cleanup[38982]: D8C136A3A: milter-reject: END-OF-MESSAGE from unknown[1.2.3.4]: 4.7.1 Greylisting in action, try again later; from=<sender1@sender.com> to=<dest1@example.com> proto=ESMTP helo=<mail.sender.com>
+		    or
+		2023-12-22T09:11:42.627010+01:00 smtp-02.example.org postfix/smtpd[2717] 6CB5F45B78: reject: RCPT from unknown[11.12.13.14]: 450 4.1.2 <mark@distant.domain.nz>: Recipient address rejected: Domain not found; from=<a.user@a.domain.fr> to=<mark@distant.domain.nz> proto=ESMTP helo=<mail.a.domain.fr>
 	*/
 	// "removed" message is end of logs. then flush.
-	if logFormat.Messages == "removed" || strings.HasPrefix(logFormat.Status, "milter-") {
+	if logFormat.Messages == "removed" || strings.HasPrefix(logFormat.Status, "milter-") || strings.EqualFold(logFormat.Status, "postfix-reject") {
 		mqMtx.Lock()
 		if plp, ok := mq[logFormat.QueueId]; ok {
 			for _, plpf := range PlpToFlat(plp) {
 				switch plpf.Status {
 				case "sent":
 					MsgSentCnt.WithLabelValues(plpf.Hostname).Inc()
-				case "milter-reject":
+				case "milter-reject", "postfix-reject":
 					MsgRejectedCnt.WithLabelValues(plpf.Hostname).Inc()
 				case "milter-hold":
 					MsgHoldCnt.WithLabelValues(plpf.Hostname).Inc()

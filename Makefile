@@ -28,7 +28,7 @@ vendoring:
 ## Build
 build:
 	go get
-	goxz -os=darwin,linux -arch=amd64 -d=pkg ./$(Name)
+	goxz -os=freebsd,darwin,linux -arch=amd64 -d=pkg ./$(Name)
 
 ## Release
 release:

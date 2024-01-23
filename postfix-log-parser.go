@@ -21,7 +21,8 @@ const (
 	SenderNDNRegexpFormat      = `(?:sender non-delivery notification: ([0-9A-Z]*))?`
 	MilterRegexpFormat         = `(?:(milter-.*): .* from (.+)\[(.+)\]: .*from=<(.+@.+)?> to=<(.+@.+)> .*)?`
 	AuthentFailedRegexpFormat  = `(?:warning: (.+)\[(.+)\]: SASL (.*) authentication failed: (.*))?`
-	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + MilterRegexpFormat + AuthentFailedRegexpFormat + `.*)`
+	PostfixRejectRegexpFormat  = `(?:reject: RCPT from (.+)\[(.+)\]: [0-9]{3} [0-9\.]{5} [^;]*; from=<(.+@.+)?> to=<(.+@[^>]+)>.*$)?`
+	MessageDetailsRegexpFormat = `(` + ClientRegexpFormat + MessageIdRegexpFormat + FromRegexpFormat + ToRegexpFormat + SenderNDNRegexpFormat + MilterRegexpFormat + AuthentFailedRegexpFormat + PostfixRejectRegexpFormat + `.*)`
 	RegexpFormat               = SyslogPri + TimeRegexpFormat + ` ` + HostRegexpFormat + ` ` + ProcessRegexpFormat + `:? ` + QueueIdRegexpFormat + `(?:\: )?` + MessageDetailsRegexpFormat
 )
 
@@ -94,12 +95,19 @@ func (p *PostfixLog) Parse(text []byte) (LogFormat, error) {
 		logFormat.ClinetIp = string(group[19])
 		logFormat.From = string(group[20])
 		logFormat.To = string(group[21])
-		// Authentication failure
+	// Authentication failure
 	} else if len(group[22]) > 0 {
 		logFormat.ClientHostname = string(group[22])
 		logFormat.ClinetIp = string(group[23])
 		logFormat.SaslMethod = string(group[24])
 		logFormat.Status = "auth-failed"
+	// postfix-reject
+	} else if len(group[26]) > 0 {
+		logFormat.ClientHostname = string(group[26])
+		logFormat.ClinetIp = string(group[27])
+		logFormat.From = string(group[28])
+		logFormat.To = string(group[29])
+		logFormat.Status = "postfix-reject"
 	} else {
 		logFormat.Status = string(group[15])
 		logFormat.ClientHostname = string(group[6])

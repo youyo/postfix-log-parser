@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-Owner := youyo
+Owner := yo000
 Name := postfix-log-parser
 Repository := "github.com/$(Owner)/$(Name)"
 GithubToken := ${GITHUB_TOKEN}
@@ -28,7 +28,7 @@ vendoring:
 ## Build
 build:
 	go get
-	goxz -os=darwin,linux -arch=amd64 -d=pkg ./$(Name)
+	goxz -os=freebsd,darwin,linux -arch=amd64 -d=pkg ./$(Name)
 
 ## Release
 release:
